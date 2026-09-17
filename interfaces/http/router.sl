@@ -137,7 +137,7 @@ pub fn dispatch(svc: user_app.UserService, post_svc: post_app.PostService, socia
             }
             return http.method_not_allowed();
         }
-        return http.not_found();
+        return not_found_json();
     }
     if len(parts) == 3 && parts[1] == "users" && req.method == "GET" {
         return handle_get_user(svc, parts[2]);
@@ -172,5 +172,5 @@ pub fn dispatch(svc: user_app.UserService, post_svc: post_app.PostService, socia
     if strings.has_prefix(path, "/auth/") || strings.has_prefix(path, "/me") || path == "/posts" || path == feed_path() || path == health_path() {
         return http.method_not_allowed();
     }
-    return http.not_found();
+    return not_found_json();
 }

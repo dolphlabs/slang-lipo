@@ -47,7 +47,7 @@ pub fn follow(svc: SocialService, follower_id: str, username: str) -> result[soc
         return err(e);
     }
     if follower_id == target.id {
-        return err(shared.invalid_argument);
+        return err(shared.cannot_follow_self);
     }
     let now = now_secs();
     let fr = social_domain.new_follow(follower_id, target.id, now);

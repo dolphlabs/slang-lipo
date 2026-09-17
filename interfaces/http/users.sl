@@ -2,6 +2,7 @@ import "encoding";
 import "http";
 import "json";
 import "../../application/user" as user_app;
+import "../../shared";
 
 gc struct ProfileDto {
     id: str,
@@ -90,7 +91,7 @@ pub fn handle_patch_profile(svc: user_app.UserService, req: http.Request) -> htt
     let token = bearer_token(req);
     let dr: result[ProfilePatch, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = user_app.update_profile(svc, token, body.display_name, body.bio, body.website, body.location, body.pronouns, body.username);
     guard let u = rr else let e = err_of(rr) {
@@ -120,7 +121,7 @@ pub fn handle_patch_settings(svc: user_app.UserService, req: http.Request) -> ht
     let token = bearer_token(req);
     let dr: result[SettingsPatch, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = user_app.update_settings(svc, token, body.is_private, body.show_email, body.allow_dms, body.notify_likes, body.notify_follows, body.notify_mentions);
     guard let s = rr else let e = err_of(rr) {
@@ -141,11 +142,11 @@ pub fn handle_put_avatar(svc: user_app.UserService, req: http.Request) -> http.R
     let token = bearer_token(req);
     let dr: result[AvatarReq, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let br = encoding.base64_decode(body.data_base64);
     guard let data = br else let e = err_of(br) {
-        return http.bad_request("invalid base64: " + e);
+        return bad_request_json(shared.invalid_base64);
     }
     let rr = user_app.set_avatar(svc, token, data, body.content_type);
     guard let u = rr else let e = err_of(rr) {
@@ -182,7 +183,7 @@ pub fn handle_change_password(svc: user_app.UserService, req: http.Request) -> h
     let token = bearer_token(req);
     let dr: result[PasswordReq, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = user_app.change_password(svc, token, body.current_password, body.new_password);
     guard let _ok = rr else let e = err_of(rr) {
@@ -195,7 +196,7 @@ pub fn handle_change_email(svc: user_app.UserService, req: http.Request) -> http
     let token = bearer_token(req);
     let dr: result[EmailReq, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = user_app.change_email(svc, token, body.email, body.password);
     guard let _ok = rr else let e = err_of(rr) {
@@ -208,7 +209,7 @@ pub fn handle_deactivate(svc: user_app.UserService, req: http.Request) -> http.R
     let token = bearer_token(req);
     let dr: result[DeactivateReq, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = user_app.deactivate(svc, token, body.password);
     guard let _ok = rr else let e = err_of(rr) {

@@ -21,7 +21,8 @@ gc struct SigninReq {
 }
 
 gc struct ErrorBody {
-    error: str
+    error: str,
+    message: str
 }
 
 gc struct SignupResp {
@@ -84,49 +85,58 @@ fn dto_from_fields(id: str, email: str, username: str, display_name: str, bio: s
     };
 }
 
-fn err_json(status: i32, status_text: str, msg: str) -> http.Response {
-    let body: str = json.encode(ErrorBody { error: msg });
-    return http.text_response(status, status_text, "application/json; charset=utf-8", body);
+fn status_text_of(status: i32) -> str {
+    if status == 400 {
+        return "Bad Request";
+    }
+    if status == 401 {
+        return "Unauthorized";
+    }
+    if status == 403 {
+        return "Forbidden";
+    }
+    if status == 404 {
+        return "Not Found";
+    }
+    if status == 409 {
+        return "Conflict";
+    }
+    return "Internal Server Error";
 }
 
-pub fn unauthorized_json(msg: str) -> http.Response {
-    return err_json(401, "Unauthorized", msg);
+fn err_json(status: i32, code: str) -> http.Response {
+    let body: str = json.encode(ErrorBody { error: code, message: shared.message_of(code) });
+    return http.text_response(status, status_text_of(status), "application/json; charset=utf-8", body);
 }
 
-fn conflict_json(msg: str) -> http.Response {
-    return err_json(409, "Conflict", msg);
+pub fn map_err(code: str) -> http.Response {
+    return err_json(shared.status_of(code), code);
 }
 
-fn forbidden_json(msg: str) -> http.Response {
-    return err_json(403, "Forbidden", msg);
+pub fn bad_request_json(code: str) -> http.Response {
+    return map_err(code);
 }
 
-pub fn map_err(e: str) -> http.Response {
-    if e == shared.invalid_argument {
-        return http.bad_request(e);
-    }
-    if e == shared.conflict {
-        return conflict_json(e);
-    }
-    if e == shared.unauthorized {
-        return unauthorized_json(e);
-    }
-    if e == shared.email_unverified {
-        return forbidden_json(e);
-    }
-    if e == shared.forbidden {
-        return forbidden_json(e);
-    }
-    if e == shared.not_found {
-        return http.not_found();
-    }
-    return err_json(500, "Internal Server Error", shared.internal);
+pub fn unauthorized_json(code: str) -> http.Response {
+    return map_err(code);
+}
+
+pub fn not_found_json() -> http.Response {
+    return map_err(shared.not_found);
+}
+
+fn conflict_json(code: str) -> http.Response {
+    return map_err(code);
+}
+
+fn forbidden_json(code: str) -> http.Response {
+    return map_err(code);
 }
 
 pub fn handle_signup(svc: user_app.UserService, req: http.Request) -> http.Response {
     let dr: result[SignupReq, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = user_app.signup(svc, body.email, body.username, body.password);
     guard let res = rr else let e = err_of(rr) {
@@ -143,7 +153,7 @@ pub fn handle_signup(svc: user_app.UserService, req: http.Request) -> http.Respo
 pub fn handle_verify(svc: user_app.UserService, req: http.Request) -> http.Response {
     let dr: result[VerifyReq, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = user_app.verify_email(svc, body.email, body.code);
     guard let u = rr else let e = err_of(rr) {
@@ -156,7 +166,7 @@ pub fn handle_verify(svc: user_app.UserService, req: http.Request) -> http.Respo
 pub fn handle_signin(svc: user_app.UserService, req: http.Request) -> http.Response {
     let dr: result[SigninReq, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = user_app.signin(svc, body.login, body.password);
     guard let sess = rr else let e = err_of(rr) {

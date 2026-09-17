@@ -23,6 +23,9 @@ fn valid_body(body: str) -> bool {
 
 pub fn create(svc: PostService, author_id: str, body_raw: str) -> result[post_domain.Post, str] {
     let body = body_raw;
+    if len(body) == 0 {
+        return err(shared.empty_post_body);
+    }
     if !valid_body(body) {
         return err(shared.invalid_argument);
     }
@@ -65,6 +68,9 @@ pub fn list_by_username(svc: PostService, username: str, limit_raw: int) -> resu
 }
 
 pub fn update(svc: PostService, token_user_id: str, id: str, body_raw: str) -> result[post_domain.Post, str] {
+    if len(body_raw) == 0 {
+        return err(shared.empty_post_body);
+    }
     if !valid_body(body_raw) {
         return err(shared.invalid_argument);
     }

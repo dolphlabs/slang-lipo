@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Lipo API",
-    "description": "Slang social-media backend (SQLite). Bearer tokens from POST /auth/signin. Error bodies are JSON `{ \"error\": \"<code>\" }` unless noted. Common error codes: `invalid_argument`, `unauthorized`, `forbidden`, `email_unverified`, `conflict`, `not_found`, `internal`. Social: follow/unfollow + like/unlike. Feed: home timeline of followed users (+ own posts).",
-    "version": "0.4.0",
+    "description": "Slang social-media backend (SQLite). Bearer tokens from POST /auth/signin. Error bodies are JSON `{ \"error\": \"<code>\", \"message\": \"<human sentence>\" }`. Common codes: `invalid_credentials`, `invalid_token`, `email_unverified`, `email_taken`, `username_taken`, `forbidden`, `not_found`, `invalid_json`, `internal`. Social: follow/unfollow + like/unlike. Feed: home timeline of followed users (+ own posts).",
+    "version": "0.5.0",
     "contact": {
       "name": "Lipo"
     }
@@ -53,16 +53,28 @@
       "Error": {
         "type": "object",
         "required": [
-          "error"
+          "error",
+          "message"
         ],
         "properties": {
           "error": {
             "type": "string",
-            "description": "Machine-readable error code or message",
+            "description": "Machine-readable error code",
             "examples": [
-              "invalid_argument",
-              "unauthorized",
-              "conflict"
+              "invalid_credentials",
+              "invalid_token",
+              "email_taken",
+              "not_found"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message",
+            "examples": [
+              "Invalid email or password.",
+              "Missing or invalid access token.",
+              "That email is already registered.",
+              "Resource not found."
             ]
           }
         }

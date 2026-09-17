@@ -3,6 +3,7 @@ import "json";
 import "../../application/user" as user_app;
 import "../../application/post" as post_app;
 import "../../domain/post" as post_domain;
+import "../../shared";
 
 gc struct PostDto {
     id: str,
@@ -49,7 +50,7 @@ pub fn handle_create_post(users: user_app.UserService, posts: post_app.PostServi
     }
     let dr: result[PostBodyReq, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = post_app.create(posts, uid, body.body);
     guard let p = rr else let e = err_of(rr) {
@@ -88,7 +89,7 @@ pub fn handle_patch_post(users: user_app.UserService, posts: post_app.PostServic
     }
     let dr: result[PostBodyReq, str] = json.decode(req.body);
     guard let body = dr else let e = err_of(dr) {
-        return http.bad_request("invalid JSON: " + e);
+        return bad_request_json(shared.invalid_json);
     }
     let rr = post_app.update(posts, uid, id, body.body);
     guard let p = rr else let e = err_of(rr) {

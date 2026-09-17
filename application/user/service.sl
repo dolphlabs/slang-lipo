@@ -102,11 +102,11 @@ fn issue_verification(svc: UserService, user_id: str, to_email: str) -> result[b
 
 fn token_hash_of(svc: UserService, token: str) -> result[str, str] {
     if len(token) == 0 {
-        return err(shared.unauthorized);
+        return err(shared.invalid_token);
     }
     let hd = encoding.hex_decode(token);
     guard let raw = hd else {
-        return err(shared.unauthorized);
+        return err(shared.invalid_token);
     }
     return ok(shared.hmac_hex(svc.pepper, raw));
 }
@@ -118,10 +118,13 @@ fn auth_from_token(svc: UserService, token: str) -> result[sqlite.AuthRow, str] 
     }
     let sr = sqlite.find_session_user(svc.repo, token_hash, now_secs());
     guard let row = sr else let e = err_of(sr) {
+        if e == shared.not_found || e == shared.unauthorized {
+            return err(shared.invalid_token);
+        }
         return err(e);
     }
     if row.deactivated_at != 0 {
-        return err(shared.unauthorized);
+        return err(shared.account_deactivated);
     }
     return ok(row);
 }
@@ -130,13 +133,13 @@ pub fn signup(svc: UserService, email_raw: str, username_raw: str, password: str
     let email_addr = strings.trim(email_raw);
     let username = strings.trim(username_raw);
     if !valid_email(email_addr) {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_email);
     }
     if !valid_username(username) {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_username);
     }
     if len(password) < 8 {
-        return err(shared.invalid_argument);
+        return err(shared.weak_password);
     }
 
     let existing_e = sqlite.find_auth_by_email(svc.repo, email_addr);
@@ -171,16 +174,16 @@ pub fn signup(svc: UserService, email_raw: str, username_raw: str, password: str
             let pubu = user_domain.to_public(sqlite.to_user(row));
             return ok(user_domain.SignupResult { user: pubu, verification_sent: true });
         }
-        return err(shared.conflict);
+        return err(shared.username_taken);
     }
-    return err(shared.conflict);
+    return err(shared.email_taken);
 }
 
 pub fn verify_email(svc: UserService, email_raw: str, code_raw: str) -> result[user_domain.UserPublic, str] {
     let email_addr = strings.trim(email_raw);
     let code = strings.trim(code_raw);
     if len(code) != 6 {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_code);
     }
     let ar = sqlite.find_auth_by_email(svc.repo, email_addr);
     guard let row = ar else let e = err_of(ar) {
@@ -193,6 +196,9 @@ pub fn verify_email(svc: UserService, email_raw: str, code_raw: str) -> result[u
     let code_hash = shared.hmac_str_hex(svc.pepper, code);
     let vr = sqlite.find_open_verification(svc.repo, row.id, code_hash, now);
     guard let vid = vr else let e = err_of(vr) {
+        if e == shared.invalid_argument || e == shared.not_found {
+            return err(shared.invalid_code);
+        }
         return err(e);
     }
     let cr = sqlite.consume_verification(svc.repo, vid, now);
@@ -214,7 +220,7 @@ pub fn resend_code(svc: UserService, email_raw: str) -> result[bool, str] {
         return err(e);
     }
     if row.email_verified {
-        return err(shared.invalid_argument);
+        return err(shared.already_verified);
     }
     return issue_verification(svc, row.id, row.email);
 }
@@ -232,15 +238,15 @@ pub fn signin(svc: UserService, login_raw: str, password: str) -> result[user_do
     }
     guard let row = ar else let e = err_of(ar) {
         if e == shared.not_found {
-            return err(shared.unauthorized);
+            return err(shared.invalid_credentials);
         }
         return err(e);
     }
     if row.deactivated_at != 0 {
-        return err(shared.unauthorized);
+        return err(shared.account_deactivated);
     }
     if !shared.verify_password(svc.pepper, password, row.password_salt, row.password_hash) {
-        return err(shared.unauthorized);
+        return err(shared.invalid_credentials);
     }
     if !row.email_verified {
         return err(shared.email_unverified);
@@ -314,7 +320,7 @@ pub fn update_profile(svc: UserService, token: str, display_name: opt[str], bio:
     let cand = username ?? row.username;
     let cand2 = strings.trim(cand);
     if !valid_username(cand2) {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_username);
     }
     if cand2 != row.username {
         let existing = sqlite.find_auth_by_username(svc.repo, cand2);
@@ -333,7 +339,7 @@ pub fn update_profile(svc: UserService, token: str, display_name: opt[str], bio:
             }
             return ok(user_domain.to_public(sqlite.to_user(fresh)));
         }
-        return err(shared.conflict);
+        return err(shared.username_taken);
     }
     let now2 = now_secs();
     let ur2 = sqlite.update_profile_fields(svc.repo, row.id, dn2, b2, w2, loc2, prn2, cand2, now2);
@@ -378,10 +384,10 @@ pub fn change_password(svc: UserService, token: str, current: str, new_password:
         return err(e);
     }
     if len(new_password) < 8 {
-        return err(shared.invalid_argument);
+        return err(shared.weak_password);
     }
     if !shared.verify_password(svc.pepper, current, row.password_salt, row.password_hash) {
-        return err(shared.unauthorized);
+        return err(shared.invalid_credentials);
     }
     let hr = shared.hash_password(svc.pepper, new_password);
     guard let parts = hr else let e = err_of(hr) {
@@ -397,10 +403,10 @@ pub fn change_email(svc: UserService, token: str, new_email: str, password: str)
     }
     let email_addr = strings.trim(new_email);
     if !valid_email(email_addr) {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_email);
     }
     if !shared.verify_password(svc.pepper, password, row.password_salt, row.password_hash) {
-        return err(shared.unauthorized);
+        return err(shared.invalid_credentials);
     }
     let existing = sqlite.find_auth_by_email(svc.repo, email_addr);
     guard let _ex = existing else let e = err_of(existing) {
@@ -414,7 +420,7 @@ pub fn change_email(svc: UserService, token: str, new_email: str, password: str)
         return issue_verification(svc, row.id, email_addr);
     }
     if _ex.id != row.id {
-        return err(shared.conflict);
+        return err(shared.email_taken);
     }
     return ok(true);
 }
@@ -433,22 +439,22 @@ pub fn set_avatar(svc: UserService, token: str, data: bytes, content_type: str) 
         return err(e);
     }
     if len(data) == 0 || len(data) > 2097152 {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_avatar);
     }
     let ct = strings.to_lower(strings.trim(content_type));
     let ext = "";
     if ct == "image/jpeg" || ct == "image/jpg" {
         if !is_jpeg(data) {
-            return err(shared.invalid_argument);
+            return err(shared.invalid_avatar);
         }
         ext = "jpg";
     } else if ct == "image/png" {
         if !is_png(data) {
-            return err(shared.invalid_argument);
+            return err(shared.invalid_avatar);
         }
         ext = "png";
     } else {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_avatar);
     }
     let wr = storage.write_avatar(svc.upload_dir, row.id, ext, data);
     guard let path = wr else let e = err_of(wr) {
@@ -524,7 +530,7 @@ pub fn deactivate(svc: UserService, token: str, password: str) -> result[bool, s
         return err(e);
     }
     if !shared.verify_password(svc.pepper, password, row.password_salt, row.password_hash) {
-        return err(shared.unauthorized);
+        return err(shared.invalid_credentials);
     }
     let now = now_secs();
     let dr = sqlite.deactivate_user(svc.repo, row.id, now);

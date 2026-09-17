@@ -34,7 +34,7 @@ pub fn home(svc: FeedService, user_id: str, limit_raw: int, cursor: str) -> resu
         let tr = to_int(parts[0]);
         guard let ts = tr else let e = err_of(tr) {
             let _discard_e = e;
-            return err(shared.invalid_argument);
+            return err(shared.invalid_cursor);
         }
         cursor_ts = ts;
         cursor_id = parts[1];

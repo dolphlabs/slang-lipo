@@ -44,21 +44,21 @@ pub fn encode_cursor(created_at: i64, id: str) -> str {
 
 pub fn parse_cursor(cursor: str) -> result[[str], str] {
     if len(cursor) == 0 {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_cursor);
     }
     let us = strings.find(cursor, "_");
     if us <= 0 {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_cursor);
     }
     let ts_s = strings.slice(cursor, 0, us);
     let id = strings.slice(cursor, us + 1, len(cursor));
     if len(id) == 0 {
-        return err(shared.invalid_argument);
+        return err(shared.invalid_cursor);
     }
     let tr = to_int(ts_s);
     guard let _ts = tr else let e = err_of(tr) {
         let _discard_e = e;
-        return err(shared.invalid_argument);
+        return err(shared.invalid_cursor);
     }
     let out: [str] = [ts_s, id];
     return ok(out);
