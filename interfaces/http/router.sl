@@ -5,6 +5,7 @@ import "../../application/user" as user_app;
 import "../../application/post" as post_app;
 import "../../application/social" as social_app;
 import "../../application/feed" as feed_app;
+import "../../application/chat" as chat_app;
 
 pub fn strip_query(path: str) -> str {
     let q = strings.find(path, "?");
@@ -45,7 +46,12 @@ pub fn register() -> [str] {
         "DELETE /posts/:id",
         "POST /posts/:id/like",
         "DELETE /posts/:id/like",
-        "GET /feed"
+        "GET /feed",
+        "POST /chats/dm",
+        "GET /chats",
+        "GET /chats/:id/messages",
+        "POST /chats/:id/messages",
+        "GET /ws"
     ];
     return routes;
 }
@@ -59,7 +65,7 @@ pub fn print_routes() {
     }
 }
 
-pub fn dispatch(svc: user_app.UserService, post_svc: post_app.PostService, social_svc: social_app.SocialService, feed_svc: feed_app.FeedService, req: http.Request) -> http.Response {
+pub fn dispatch(svc: user_app.UserService, post_svc: post_app.PostService, social_svc: social_app.SocialService, feed_svc: feed_app.FeedService, chat_svc: chat_app.ChatService, req: http.Request) -> http.Response {
     let path = strip_query(req.path);
     if path == health_path() && req.method == "GET" {
         return http.ok_json("{\"status\":\"" + health_ok() + "\"}");
@@ -109,6 +115,12 @@ pub fn dispatch(svc: user_app.UserService, post_svc: post_app.PostService, socia
     if path == feed_path() && req.method == "GET" {
         return handle_get_feed(svc, feed_svc, req);
     }
+    if path == "/chats/dm" && req.method == "POST" {
+        return handle_create_dm(svc, chat_svc, req);
+    }
+    if path == "/chats" && req.method == "GET" {
+        return handle_list_chats(svc, chat_svc, req);
+    }
 
     let parts = strings.split(path, "/");
     // ["", "users", ":username"] or ["", "users", ":username", "posts"|"follow"|"followers"|"following"]
@@ -142,6 +154,16 @@ pub fn dispatch(svc: user_app.UserService, post_svc: post_app.PostService, socia
     if len(parts) == 3 && parts[1] == "users" && req.method == "GET" {
         return handle_get_user(svc, parts[2]);
     }
+    if len(parts) == 4 && parts[1] == "chats" && parts[3] == "messages" {
+        let id = parts[2];
+        if req.method == "GET" {
+            return handle_list_messages(svc, chat_svc, req, id);
+        }
+        if req.method == "POST" {
+            return handle_send_message(svc, chat_svc, req, id);
+        }
+        return http.method_not_allowed();
+    }
     if len(parts) == 3 && parts[1] == "avatars" && req.method == "GET" {
         return handle_get_avatar(svc, parts[2]);
     }
@@ -169,7 +191,7 @@ pub fn dispatch(svc: user_app.UserService, post_svc: post_app.PostService, socia
         return http.method_not_allowed();
     }
 
-    if strings.has_prefix(path, "/auth/") || strings.has_prefix(path, "/me") || path == "/posts" || path == feed_path() || path == health_path() {
+    if strings.has_prefix(path, "/auth/") || strings.has_prefix(path, "/me") || path == "/posts" || path == "/chats" || path == "/chats/dm" || path == feed_path() || path == health_path() {
         return http.method_not_allowed();
     }
     return not_found_json();

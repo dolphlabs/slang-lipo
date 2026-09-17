@@ -1,25 +1,35 @@
-// Request reader that answers Expect: 100-continue (Apidog and similar clients).
-// Same shape as stdlib http.read, but sends "100 Continue" once headers are in
-// and the body is still outstanding — otherwise the client waits forever.
-import "byteutil";
+// infrastructure/httpread — request reader with Expect:100-continue + O(n) wire copy.
+// Wraps the same link/wire loop as stdlib http.read, but answers 100-continue
+// once headers are complete so clients can send the body.
 import "http";
 import "strings";
 
-fn find_crlf(raw: bytes, from: int) -> int {
-    let i = from;
-    while i + 1 < len(raw) {
-        if raw[i] == 13 && raw[i + 1] == 10 {
-            return i;
-        }
-        i = i + 1;
-    }
-    return -1;
+pub gc struct Incoming {
+    req: http.Request,
+    filled: int
 }
 
-fn find_blank_line(raw: bytes) -> int {
+fn lower_byte(b: int) -> int {
+    if b >= 65 && b <= 90 {
+        return b + 32;
+    }
+    return b;
+}
+
+fn lower_ascii(s: str) -> str {
+    let b = to_bytes(s);
     let i = 0;
-    while i + 3 < len(raw) {
-        if raw[i] == 13 && raw[i + 1] == 10 && raw[i + 2] == 13 && raw[i + 3] == 10 {
+    while i < len(b) {
+        b[i] = lower_byte(b[i]);
+        i = i + 1;
+    }
+    return to_str(b);
+}
+
+fn find_crlf(b: bytes, from: int) -> int {
+    let i = from;
+    while i + 1 < len(b) {
+        if b[i] == 13 && b[i + 1] == 10 {
             return i;
         }
         i = i + 1;
@@ -27,20 +37,52 @@ fn find_blank_line(raw: bytes) -> int {
     return -1;
 }
 
-fn is_ows(b: int) -> bool {
-    return b == 32 || b == 9;
+fn find_blank_line(b: bytes) -> int {
+    let i = 0;
+    let n = len(b);
+    while i + 3 < n {
+        if b[i] == 13 && b[i + 1] == 10 && b[i + 2] == 13 && b[i + 3] == 10 {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
 }
 
-fn trim_ows(b: bytes) -> bytes {
-    let lo = 0;
-    let hi = len(b);
-    while lo < hi && is_ows(b[lo]) {
-        lo = lo + 1;
+// O(n) wire → bytes (single allocation via doubling concat of chunks).
+fn make_bytes(n: int) -> bytes {
+    if n <= 0 {
+        return b"";
     }
-    while hi > lo && is_ows(b[hi - 1]) {
-        hi = hi - 1;
+    let s = b"\x00";
+    while len(s) < n {
+        s = s + s;
     }
-    return b[lo..hi];
+    return s[0..n];
+}
+
+fn copy_wire_on(w: wire, n: int) -> bytes {
+    // O(n): doubling buffer + index fill (byte-at-a-time concat is O(n^2)).
+    let out = make_bytes(n);
+    let i = 0;
+    while i < n {
+        out[i] = w[i];
+        i = i + 1;
+    }
+    return out;
+}
+
+fn compact_wire(buf: wire, used: int, filled: int) -> int {
+    if used <= 0 {
+        return filled;
+    }
+    let n = filled - used;
+    let i = 0;
+    while i < n {
+        buf[i] = buf[used + i];
+        i = i + 1;
+    }
+    return n;
 }
 
 fn parse_digits(s: str) -> result[int, str] {
@@ -61,57 +103,11 @@ fn parse_digits(s: str) -> result[int, str] {
     return ok(n);
 }
 
-fn parse_headers_map(raw: bytes, start: int, sep: int) -> result[map[str]str, str] {
-    let headers: map[str]str = {};
-    let i = start;
-    while i < sep {
-        let eol = find_crlf(raw, i);
-        if eol < 0 || eol > sep {
-            return err("malformed header");
-        }
-        if eol == i {
-            break;
-        }
-        let colon = byteutil.find(raw, i, 58);
-        if colon < 0 || colon >= eol {
-            return err("malformed header");
-        }
-        let name = strings.to_lower(to_str(raw[i..colon]));
-        let value = to_str(trim_ows(raw[colon + 1..eol]));
-        headers[name] = value;
-        i = eol + 2;
-    }
-    return ok(headers);
-}
-
-fn copy_wire(w: wire, n: int) -> bytes {
-    let out = b"";
-    let i = 0;
-    while i < n {
-        out = out + to_le(w[i])[0..1];
-        i = i + 1;
-    }
-    return out;
-}
-
-fn compact_wire(buf: wire, used: int, filled: int) -> int {
-    if used <= 0 {
-        return filled;
-    }
-    let n = filled - used;
-    let i = 0;
-    while i < n {
-        buf[i] = buf[used + i];
-        i = i + 1;
-    }
-    return n;
-}
-
-fn wants_100(headers: map[str]str) -> bool {
+fn expects_100(headers: map[str]str) -> bool {
     if !has(headers, "expect") {
         return false;
     }
-    return strings.contains(strings.to_lower(headers["expect"]), "100-continue");
+    return strings.contains(lower_ascii(headers["expect"]), "100-continue");
 }
 
 fn body_need(headers: map[str]str, sep: int) -> result[int, str] {
@@ -132,21 +128,55 @@ fn rejects_transfer(headers: map[str]str) -> bool {
     if !has(headers, "transfer-encoding") {
         return false;
     }
-    return strings.to_lower(headers["transfer-encoding"]) != "identity";
+    return lower_ascii(headers["transfer-encoding"]) != "identity";
 }
 
-pub fn read_request(c: &mut link, buf: wire, filled: int, deadline: until) -> result[http.Incoming, str] {
+fn parse_headers_only(raw: bytes, start: int, sep: int) -> result[map[str]str, str] {
+    let headers: map[str]str = {};
+    let i = start;
+    while i < sep {
+        let eol = find_crlf(raw, i);
+        if eol < 0 || eol > sep {
+            return err("malformed header");
+        }
+        if eol == i {
+            break;
+        }
+        let colon = i;
+        while colon < eol && raw[colon] != 58 {
+            colon = colon + 1;
+        }
+        if colon >= eol || colon == i {
+            return err("malformed header");
+        }
+        let name = lower_ascii(to_str(raw[i..colon]));
+        let lo = colon + 1;
+        let hi = eol;
+        while lo < hi && (raw[lo] == 32 || raw[lo] == 9) {
+            lo = lo + 1;
+        }
+        while hi > lo && (raw[hi - 1] == 32 || raw[hi - 1] == 9) {
+            hi = hi - 1;
+        }
+        headers[name] = to_str(raw[lo..hi]);
+        i = eol + 2;
+    }
+    return ok(headers);
+}
+
+pub fn read_request(c: &mut link, buf: wire, filled_in: int, deadline: until) -> result[Incoming, str] {
+    let filled = filled_in;
     let sent_100 = false;
     while true {
         if filled > 0 {
-            let raw = copy_wire(buf, filled);
+            let raw = copy_wire_on(buf, filled);
             let sep = find_blank_line(raw);
             if sep >= 0 {
                 let line_end = find_crlf(raw, 0);
                 if line_end < 0 {
                     return err("malformed request line");
                 }
-                let hr = parse_headers_map(raw, line_end + 2, sep);
+                let hr = parse_headers_only(raw, line_end + 2, sep);
                 guard let headers = hr else let e = err_of(hr) {
                     return err("header: " + e);
                 }
@@ -160,10 +190,10 @@ pub fn read_request(c: &mut link, buf: wire, filled: int, deadline: until) -> re
                 if need > len(buf) {
                     return err("request too large for buffer");
                 }
-                if filled < need && wants_100(headers) && !sent_100 {
+                if !sent_100 && expects_100(headers) && filled < need {
                     let wr = c.send_bytes(b"HTTP/1.1 100 Continue\r\n\r\n", deadline);
-                    guard let _n = wr else {
-                        return err("100-continue send failed");
+                    guard let _n = wr else let e = err_of(wr) {
+                        return err("100-continue: " + to_str(e));
                     }
                     sent_100 = true;
                 }
@@ -173,7 +203,7 @@ pub fn read_request(c: &mut link, buf: wire, filled: int, deadline: until) -> re
                         return err(e);
                     }
                     let rest = compact_wire(buf, need, filled);
-                    return ok(http.Incoming { req: req, filled: rest });
+                    return ok(Incoming { req: req, filled: rest });
                 }
             }
         }

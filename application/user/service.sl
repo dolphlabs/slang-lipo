@@ -453,15 +453,6 @@ pub fn set_avatar(svc: UserService, token: str, data: bytes, content_type: str) 
             return err(shared.invalid_avatar);
         }
         ext = "png";
-    } else if ct == "application/octet-stream" || ct == "" {
-        // multipart often sends generic type — sniff magic bytes
-        if is_jpeg(data) {
-            ext = "jpg";
-        } else if is_png(data) {
-            ext = "png";
-        } else {
-            return err(shared.invalid_avatar);
-        }
     } else {
         return err(shared.invalid_avatar);
     }

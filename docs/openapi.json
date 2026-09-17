@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Lipo API",
-    "description": "Slang social-media backend (SQLite). Bearer tokens from POST /auth/signin. Error bodies are JSON `{ \"error\": \"<code>\", \"message\": \"<human sentence>\" }`. Common codes: `invalid_credentials`, `invalid_token`, `email_unverified`, `email_taken`, `username_taken`, `forbidden`, `not_found`, `invalid_json`, `internal`. Social: follow/unfollow + like/unlike. Feed: home timeline of followed users (+ own posts).",
-    "version": "0.5.1",
+    "description": "Slang social-media backend (SQLite). Bearer tokens from POST /auth/signin. Error bodies are JSON `{ \"error\": \"<code>\", \"message\": \"<human sentence>\" }`. Social: follow/unfollow + like/unlike. Feed: home timeline. Chat: 1:1 DMs. Realtime: WebSocket at GET /ws?token= (RFC 6455).",
+    "version": "0.6.0",
     "contact": {
       "name": "Lipo"
     }
@@ -38,6 +38,14 @@
     {
       "name": "Feed",
       "description": "Home timeline for the authenticated user"
+    },
+    {
+      "name": "Chat",
+      "description": "1:1 direct messages"
+    },
+    {
+      "name": "Realtime",
+      "description": "WebSocket hub"
     }
   ],
   "components": {
@@ -443,6 +451,28 @@
           }
         }
       },
+      "AvatarUpload": {
+        "type": "object",
+        "required": [
+          "content_type",
+          "data_base64"
+        ],
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "description": "Must match file magic (JPEG/PNG)"
+          },
+          "data_base64": {
+            "type": "string",
+            "format": "byte",
+            "description": "Standard base64 image bytes; max ~2MB decoded"
+          }
+        }
+      },
       "PasswordChange": {
         "type": "object",
         "required": [
@@ -658,6 +688,122 @@
               "",
               "1710000000_abc123"
             ]
+          }
+        }
+      },
+      "Conversation": {
+        "type": "object",
+        "required": [
+          "id",
+          "peer_id",
+          "peer_username",
+          "peer_display_name",
+          "peer_avatar_path",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "peer_id": {
+            "type": "string"
+          },
+          "peer_username": {
+            "type": "string"
+          },
+          "peer_display_name": {
+            "type": "string"
+          },
+          "peer_avatar_path": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "integer"
+          }
+        }
+      },
+      "ChatMessage": {
+        "type": "object",
+        "required": [
+          "id",
+          "conversation_id",
+          "sender_id",
+          "body",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "conversation_id": {
+            "type": "string"
+          },
+          "sender_id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer"
+          }
+        }
+      },
+      "ConversationsResponse": {
+        "type": "object",
+        "required": [
+          "conversations"
+        ],
+        "properties": {
+          "conversations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Conversation"
+            }
+          }
+        }
+      },
+      "MessagesPage": {
+        "type": "object",
+        "required": [
+          "messages",
+          "next_cursor"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            }
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        }
+      },
+      "DmRequest": {
+        "type": "object",
+        "required": [
+          "username"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "SendMessageRequest": {
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
           }
         }
       }
@@ -1159,7 +1305,7 @@
           "Profile"
         ],
         "summary": "Upload avatar",
-        "description": "Upload a JPEG or PNG file. Prefer `multipart/form-data` with field name `avatar`. Also accepts raw body with `Content-Type: image/jpeg` or `image/png`. Stored as binary under `LIPO_UPLOAD_DIR` (not base64). Max size 2MB.",
+        "description": "JSON base64 upload (no multipart). Accepts JPEG/PNG by magic bytes; stored under `LIPO_UPLOAD_DIR`.",
         "operationId": "putAvatar",
         "security": [
           {
@@ -1169,31 +1315,9 @@
         "requestBody": {
           "required": true,
           "content": {
-            "multipart/form-data": {
+            "application/json": {
               "schema": {
-                "type": "object",
-                "required": [
-                  "avatar"
-                ],
-                "properties": {
-                  "avatar": {
-                    "type": "string",
-                    "format": "binary",
-                    "description": "JPEG or PNG image file"
-                  }
-                }
-              }
-            },
-            "image/jpeg": {
-              "schema": {
-                "type": "string",
-                "format": "binary"
-              }
-            },
-            "image/png": {
-              "schema": {
-                "type": "string",
-                "format": "binary"
+                "$ref": "#/components/schemas/AvatarUpload"
               }
             }
           }
@@ -1921,6 +2045,296 @@
           },
           "Unauthorized": {
             "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/chats/dm": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Create or get a DM conversation",
+        "security": [
+          {
+            "$ref": "#/components/securitySchemes/BearerAuth"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chats": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "List DM conversations",
+        "security": [
+          {
+            "$ref": "#/components/securitySchemes/BearerAuth"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chats/{id}/messages": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "List messages (cursor pagination)",
+        "security": [
+          {
+            "$ref": "#/components/securitySchemes/BearerAuth"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagesPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Send a message (persists + WS push)",
+        "security": [
+          {
+            "$ref": "#/components/securitySchemes/BearerAuth"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ws": {
+      "get": {
+        "tags": [
+          "Realtime"
+        ],
+        "summary": "WebSocket upgrade (RFC 6455)",
+        "description": "Upgrade with `Upgrade: websocket`. Auth via `?token=` (preferred) or first text frame `{\"type\":\"auth\",\"token\":\"...\"}`. Server pushes `chat.message` envelopes.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session token"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols"
+          },
+          "400": {
+            "description": "Invalid upgrade"
           }
         }
       }

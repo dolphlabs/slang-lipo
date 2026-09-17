@@ -6,12 +6,11 @@ smoke_profile/
 smoke_posts/
 smoke_social/
 smoke_feed/
-smoke_multipart/
+smoke_chat/
 smoke_auth_bin
 smoke_profile_bin
 smoke_posts_bin
 smoke_social_bin
-smoke_multipart_bin
 *.gen.c
 lipo.db
 *.db
@@ -19,3 +18,4 @@ data/
 .DS_Store
 .env
 .env.local
+smoke_chat_bin

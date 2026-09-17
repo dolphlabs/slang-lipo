@@ -104,6 +104,26 @@ pub fn migrate(db: rawptr) -> result[bool, str] {
                 return err(e);
             }
         }
+        version = 3;
+    }
+
+    // v4: 1:1 DM conversations + messages
+    if version < 4 {
+        let stmts4: [str] = [
+            "CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, user_a_id TEXT NOT NULL, user_b_id TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(user_a_id, user_b_id), CHECK(user_a_id < user_b_id))",
+            "CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, body TEXT NOT NULL, created_at INTEGER NOT NULL)",
+            "CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON messages (conversation_id, created_at DESC, id DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations (updated_at DESC)",
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (4, 0)"
+        ];
+        let k = 0;
+        while k < len(stmts4) {
+            let er4 = exec_one(db, stmts4[k]);
+            guard let _ok4 = er4 else let e = err_of(er4) {
+                return err(e);
+            }
+            k = k + 1;
+        }
     }
     return ok(true);
 }

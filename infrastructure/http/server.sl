@@ -1,13 +1,17 @@
 import "http";
-import "../httpread" as httpread;
 import "log";
 import "proc";
+import "strings";
 import "time";
 import "../../application/user" as user_app;
 import "../../application/post" as post_app;
 import "../../application/social" as social_app;
 import "../../application/feed" as feed_app;
+import "../../application/chat" as chat_app;
+import "../../infrastructure/ws" as wshub;
+import "../../infrastructure/httpread" as httpread;
 import "../../interfaces/http" as rest;
+import "../../interfaces/ws" as wsiface;
 
 pub struct Server {
     addr: str,
@@ -19,6 +23,8 @@ pub gc struct App {
     post_svc: post_app.PostService,
     social_svc: social_app.SocialService,
     feed_svc: feed_app.FeedService,
+    chat_svc: chat_app.ChatService,
+    hub: wshub.Hub,
     port: int,
     addr: str
 }
@@ -31,17 +37,30 @@ pub fn banner(srv: Server) -> str {
     return "lipo http " + srv.addr + ":" + to_str(srv.port);
 }
 
+fn path_without_query(path: str) -> str {
+    let q = strings.find(path, "?");
+    if q < 0 {
+        return path;
+    }
+    return strings.slice(path, 0, q);
+}
+
 fn serve_conn(app: App, c: link) {
-    let ra = arena_new(3145728);
-    let sa = arena_new(3145728);
-    let buf = ra.wire(3145728);
+    let ra = arena_new(65536);
+    let sa = arena_new(65536);
+    let buf = ra.wire(65536);
     let filled = 0;
     while true {
         let rr = httpread.read_request(&mut c, buf, filled, until_never());
         guard let got = rr else {
             return;
         }
-        let resp = rest.dispatch(app.svc, app.post_svc, app.social_svc, app.feed_svc, got.req);
+        let path = path_without_query(got.req.path);
+        if path == "/ws" {
+            wsiface.handle_websocket(app.svc, app.hub, &mut c, got.req, buf, got.filled);
+            return;
+        }
+        let resp = rest.dispatch(app.svc, app.post_svc, app.social_svc, app.feed_svc, app.chat_svc, got.req);
         let wr = http.write(&mut c, resp, &mut sa, until_never());
         guard let _n = wr else {
             return;

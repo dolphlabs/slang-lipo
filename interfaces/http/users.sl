@@ -1,4 +1,4 @@
-import "strings";
+import "encoding";
 import "http";
 import "json";
 import "../../application/user" as user_app;
@@ -58,6 +58,10 @@ gc struct DeactivateReq {
     password: str
 }
 
+gc struct AvatarReq {
+    content_type: str,
+    data_base64: str
+}
 
 pub fn users_collection_path() -> str {
     return "/users";
@@ -136,34 +140,15 @@ pub fn handle_patch_settings(svc: user_app.UserService, req: http.Request) -> ht
 
 pub fn handle_put_avatar(svc: user_app.UserService, req: http.Request) -> http.Response {
     let token = bearer_token(req);
-    let ct = http.header(req, "content-type") ?? "";
-    let low = strings.to_lower(ct);
-    let data: bytes = b"";
-    let content_type = "";
-    if strings.has_prefix(low, "multipart/form-data") {
-        let pr = parse_file(ct, req.body, "avatar");
-        guard let part = pr else let e = err_of(pr) {
-            return map_err(e);
-        }
-        data = part.data;
-        content_type = part.content_type;
-        if content_type == "application/octet-stream" || len(content_type) == 0 {
-            // fall back to magic bytes in set_avatar via image/* guess
-            content_type = "application/octet-stream";
-        }
-    } else if strings.has_prefix(low, "image/jpeg") || strings.has_prefix(low, "image/jpg") || strings.has_prefix(low, "image/png") {
-        // raw body upload: Content-Type image/* and body = file bytes
-        let semi = strings.find(low, ";");
-        if semi < 0 {
-            content_type = strings.trim(low);
-        } else {
-            content_type = strings.trim(strings.slice(low, 0, semi));
-        }
-        data = req.body;
-    } else {
-        return bad_request_json(shared.invalid_avatar);
+    let dr: result[AvatarReq, str] = json.decode(req.body);
+    guard let body = dr else let e = err_of(dr) {
+        return bad_request_json(shared.invalid_json);
     }
-    let rr = user_app.set_avatar(svc, token, data, content_type);
+    let br = encoding.base64_decode(body.data_base64);
+    guard let data = br else let e = err_of(br) {
+        return bad_request_json(shared.invalid_base64);
+    }
+    let rr = user_app.set_avatar(svc, token, data, body.content_type);
     guard let u = rr else let e = err_of(rr) {
         return map_err(e);
     }

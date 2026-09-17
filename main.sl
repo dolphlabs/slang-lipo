@@ -1,4 +1,4 @@
-// lipo — social-media REST API (auth + profile + posts + social + feed)
+// lipo — social-media REST API + WebSocket DMs
 //
 // Quirk: nested packages resolve imports relative to THEIR directory,
 // so domain/application/infra use paths like `import "../../shared"`.
@@ -12,6 +12,7 @@ import "application/user" as user_app;
 import "application/post" as post_app;
 import "application/social" as social_app;
 import "application/feed" as feed_app;
+import "application/chat" as chat_app;
 import "application/realtime" as rt_app;
 import "infrastructure/sqlite" as sqlite;
 import "infrastructure/http" as httpserver;
@@ -59,10 +60,12 @@ fn boot() {
     let feed_repo = sqlite.new_feed_repo(db);
     let feed_svc = feed_app.new_service(feed_repo);
 
-    let rt_gw = rt_domain.new_realtime_gateway();
-    let _rt_svc = rt_app.new_service(rt_gw);
-
     let hub = wshub.new_hub();
+    let chat_repo = sqlite.new_chat_repo(db);
+    let chat_svc = chat_app.new_service(chat_repo, user_repo, hub);
+
+    let rt_gw = rt_domain.new_realtime_gateway();
+    let _rt_svc = rt_app.new_service(rt_gw, hub);
     let _hub_size = wshub.size(hub);
 
     log.info("routes:");
@@ -73,6 +76,8 @@ fn boot() {
         post_svc: post_svc,
         social_svc: social_svc,
         feed_svc: feed_svc,
+        chat_svc: chat_svc,
+        hub: hub,
         port: cfg.http_port,
         addr: cfg.http_addr
     };

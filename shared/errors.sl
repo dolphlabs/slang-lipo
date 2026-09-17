@@ -11,6 +11,7 @@ pub let invalid_code = "invalid_code";
 pub let invalid_cursor = "invalid_cursor";
 pub let invalid_avatar = "invalid_avatar";
 pub let empty_post_body = "empty_post_body";
+pub let empty_message = "empty_message";
 
 pub let unauthorized = "unauthorized";
 pub let invalid_credentials = "invalid_credentials";
@@ -60,6 +61,9 @@ pub fn message_of(code: str) -> str {
     }
     if code == empty_post_body {
         return "Post body cannot be empty.";
+    }
+    if code == empty_message {
+        return "Message body cannot be empty.";
     }
     if code == unauthorized {
         return "Authentication required.";
@@ -113,7 +117,7 @@ pub fn status_of(code: str) -> i32 {
     if code == invalid_code || code == invalid_cursor || code == invalid_avatar {
         return 400;
     }
-    if code == empty_post_body || code == cannot_follow_self {
+    if code == empty_post_body || code == empty_message || code == cannot_follow_self {
         return 400;
     }
     if code == unauthorized || code == invalid_credentials || code == invalid_token || code == account_deactivated {
