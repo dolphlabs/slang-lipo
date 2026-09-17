@@ -1,4 +1,5 @@
 import "http";
+import "../httpread" as httpread;
 import "log";
 import "proc";
 import "time";
@@ -36,7 +37,7 @@ fn serve_conn(app: App, c: link) {
     let buf = ra.wire(3145728);
     let filled = 0;
     while true {
-        let rr = http.read(&mut c, buf, filled, until_never());
+        let rr = httpread.read_request(&mut c, buf, filled, until_never());
         guard let got = rr else {
             return;
         }

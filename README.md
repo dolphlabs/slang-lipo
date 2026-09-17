@@ -219,7 +219,11 @@ Codes and HTTP status mapping live in `shared/errors.sl`. Login failures use `in
 | `POST` | `/me/email` | change email (re-verify) |
 | `POST` | `/me/deactivate` | deactivate account |
 
-**Avatar upload** — do **not** send base64 JSON. Prefer multipart:
+**Avatar upload** — do **not** send base64 JSON. Prefer multipart.
+
+The server answers `Expect: 100-continue` (Apidog sends this on file uploads). Restart the Lipo process after pulling so that reader is active.
+
+Prefer multipart:
 
 ```bash
 curl -X PUT http://127.0.0.1:8080/me/avatar \
