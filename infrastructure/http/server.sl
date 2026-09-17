@@ -31,9 +31,9 @@ pub fn banner(srv: Server) -> str {
 }
 
 fn serve_conn(app: App, c: link) {
-    let ra = arena_new(65536);
-    let sa = arena_new(65536);
-    let buf = ra.wire(65536);
+    let ra = arena_new(3145728);
+    let sa = arena_new(3145728);
+    let buf = ra.wire(3145728);
     let filled = 0;
     while true {
         let rr = http.read(&mut c, buf, filled, until_never());

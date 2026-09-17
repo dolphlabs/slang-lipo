@@ -3,7 +3,7 @@
   "info": {
     "title": "Lipo API",
     "description": "Slang social-media backend (SQLite). Bearer tokens from POST /auth/signin. Error bodies are JSON `{ \"error\": \"<code>\", \"message\": \"<human sentence>\" }`. Common codes: `invalid_credentials`, `invalid_token`, `email_unverified`, `email_taken`, `username_taken`, `forbidden`, `not_found`, `invalid_json`, `internal`. Social: follow/unfollow + like/unlike. Feed: home timeline of followed users (+ own posts).",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "contact": {
       "name": "Lipo"
     }
@@ -440,28 +440,6 @@
             "nullable": true,
             "minLength": 3,
             "maxLength": 32
-          }
-        }
-      },
-      "AvatarUpload": {
-        "type": "object",
-        "required": [
-          "content_type",
-          "data_base64"
-        ],
-        "properties": {
-          "content_type": {
-            "type": "string",
-            "enum": [
-              "image/jpeg",
-              "image/png"
-            ],
-            "description": "Must match file magic (JPEG/PNG)"
-          },
-          "data_base64": {
-            "type": "string",
-            "format": "byte",
-            "description": "Standard base64 image bytes; max ~2MB decoded"
           }
         }
       },
@@ -1181,7 +1159,7 @@
           "Profile"
         ],
         "summary": "Upload avatar",
-        "description": "JSON base64 upload (no multipart). Accepts JPEG/PNG by magic bytes; stored under `LIPO_UPLOAD_DIR`.",
+        "description": "Upload a JPEG or PNG file. Prefer `multipart/form-data` with field name `avatar`. Also accepts raw body with `Content-Type: image/jpeg` or `image/png`. Stored as binary under `LIPO_UPLOAD_DIR` (not base64). Max size 2MB.",
         "operationId": "putAvatar",
         "security": [
           {
@@ -1191,9 +1169,31 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/AvatarUpload"
+                "type": "object",
+                "required": [
+                  "avatar"
+                ],
+                "properties": {
+                  "avatar": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "JPEG or PNG image file"
+                  }
+                }
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
               }
             }
           }
