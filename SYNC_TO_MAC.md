@@ -1,26 +1,35 @@
-# Sync roadmap 1→5 to Mac
+# Sync roadmap 1→5 to Mac + push
 
-This executor could not reach `uteesmacbook`
-(`machineId` `2ad2e283-75f7-4635-a890-661cae9579cf`) — Shell/Read ran on the box.
-Implementation is in `/workspace/lipo` and tarball `/workspace/lipo-roadmap-1-5.tgz`.
-Changes are also pushed to `origin` (`dolphlabs/slang-lipo`).
+Executor could not reach machineId `2ad2e283-75f7-4635-a890-661cae9579cf`
+(Shell/Read stayed on the box). Work landed in `/workspace/lipo` and was
+committed on top of `origin/main` as:
 
-## Apply on the Mac
+- `11f28ff` feat: realtime events, chat typing/read, password reset, post media, hardening
+
+Push from the box failed: no `ssh` client and no `gh`/HTTPS credentials.
+Push from the Mac (has GitHub auth):
 
 ```sh
-# Prefer git pull if origin is up to date:
-cd /Users/utee/Documents/lipo && git pull
-
-# Or from tarball (never overwrite .env):
-# rsync -a --exclude .env --exclude '*.db' --exclude main --exclude smoke_*_bin lipo/ /Users/utee/Documents/lipo/
 cd /Users/utee/Documents/lipo
+git fetch origin
+git checkout main
+git pull --ff-only   # should be at 0f72e99 or later
+# Option A — if this workspace is shared / you copy the repo:
+#   git cherry-pick 11f28ff
+# Option B — apply patch/bundle from the box artifacts:
+#   git pull
+#   git am /path/to/lipo-roadmap-1-5.patch
+#   # or: git pull /path/to/lipo-roadmap-1-5.bundle
+git push -u origin HEAD
 slangc main.sl
 ```
 
-**Never overwrite `.env`.** Merge new keys from `.env.example` by hand.
+Or rsync tree (never overwrite `.env`):
 
-## Verify
+```sh
+rsync -a --exclude .env --exclude '*.db' --exclude main --exclude '*_bin' \
+  /path/to/workspace/lipo/ /Users/utee/Documents/lipo/
+cd /Users/utee/Documents/lipo && slangc main.sl && git push -u origin HEAD
+```
 
-- `slangc main.sl` succeeds
-- migrate at **v7**
-- WS events: `post.created`, `post.liked`, `user.followed`, `typing`, `chat.read`
+Artifacts on the box: `/workspace/lipo-roadmap-1-5.tgz`, `.patch`, `.bundle`.
