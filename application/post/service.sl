@@ -47,19 +47,8 @@ fn push_post_created(svc: PostService, p: post_domain.Post) {
         like_count: p.like_count as i64
     };
     let text = "{\"type\":\"post.created\",\"payload\":" + json.encode(payload) + "}";
-    wshub.publish(svc.hub, p.author_id, text);
-    let fr = sqlite.list_follower_ids(svc.social, p.author_id, 2000);
-    guard let ids = fr else let e = err_of(fr) {
-        let _discard = e;
-        return;
-    }
-    let i = 0;
-    while i < len(ids) {
-        if ids[i] != p.author_id {
-            wshub.publish(svc.hub, ids[i], text);
-        }
-        i = i + 1;
-    }
+    // Public timeline: notify every connected client.
+    wshub.publish_all(svc.hub, text);
 }
 
 pub fn create(svc: PostService, author_id: str, body_raw: str) -> result[post_domain.Post, str] {

@@ -3,7 +3,7 @@
   "info": {
     "title": "Lipo API",
     "description": "Slang social-media backend (SQLite). Bearer tokens from POST /auth/signin. Error bodies are JSON `{ \"error\": \"<code>\", \"message\": \"<human sentence>\" }`. Social: follow/unfollow + like/unlike. Feed: home timeline. Chat: 1:1 DMs with typing/read. Realtime WS events: post.created, post.liked, user.followed, chat.message, typing, chat.read. Password reset + post media. Rate limits on auth and message send.",
-    "version": "0.7.0",
+    "version": "0.7.1",
     "contact": {
       "name": "Lipo"
     }
@@ -2069,8 +2069,8 @@
         "tags": [
           "Feed"
         ],
-        "summary": "Home timeline",
-        "description": "Posts from users the requester follows, plus the requester's own posts, newest first. Requires Bearer auth. Cursor is opaque `created_at_postid` (unix seconds).",
+        "summary": "Home timeline (public)",
+        "description": "Public home timeline: recent posts from all active users (not follow-graph-only). Includes `liked_by_me` for the viewer. Cursor pagination.",
         "operationId": "getFeed",
         "security": [
           {

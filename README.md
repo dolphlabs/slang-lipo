@@ -11,7 +11,7 @@ Slang social-media backend (SQLite): auth, profiles, posts (+ media), social gra
 | Profile + avatar + settings | Done |
 | Posts + likes + media | Done |
 | Follow graph | Done |
-| Home feed (cursor pagination) | Done |
+| Home feed — **public timeline** of all users (cursor pagination; follow graph still used for social/WS) | Done |
 | WebSocket `/ws` (RFC 6455) | Done |
 | Realtime: `post.created` / `post.liked` / `user.followed` | Done |
 | 1:1 chats / DMs + typing / read | Done |

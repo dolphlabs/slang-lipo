@@ -95,3 +95,20 @@ pub fn publish_except(hub: Hub, user_id: str, except_conn_id: str, json_text: st
         i = i + 1;
     }
 }
+
+
+// Fan-out to every connected socket (public timeline events).
+pub fn publish_all(hub: Hub, json_text: str) {
+    let targets: [chan[str]] = [];
+    mutex_lock(hub.lock);
+    for cid, out in hub.outs {
+        let _discard_cid = cid;
+        push(targets, out);
+    }
+    mutex_unlock(hub.lock);
+    let i = 0;
+    while i < len(targets) {
+        chan_send(targets[i], json_text);
+        i = i + 1;
+    }
+}
