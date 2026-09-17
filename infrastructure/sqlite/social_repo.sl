@@ -122,6 +122,37 @@ pub fn is_following(repo: SqliteSocialRepo, follower_id: str, followee_id: str) 
     return ok(true);
 }
 
+
+pub fn list_follower_ids(repo: SqliteSocialRepo, followee_id: str, limit: int) -> result[[str], str] {
+    let lim = limit;
+    if lim <= 0 {
+        lim = 500;
+    }
+    if lim > 2000 {
+        lim = 2000;
+    }
+    let pr = sql.prepare(repo.db, "SELECT follower_id FROM follows WHERE followee_id = ? ORDER BY created_at DESC LIMIT ?");
+    guard let st = pr else let e = err_of(pr) {
+        return err(e);
+    }
+    sql.bind_text(st, 1, followee_id);
+    sql.bind_int(st, 2, lim);
+    let out: [str] = [];
+    while true {
+        let sr = sql.step(st);
+        guard let more = sr else let e = err_of(sr) {
+            sql.finalize(st);
+            return err(e);
+        }
+        if !more {
+            break;
+        }
+        push(out, sql.col_text(st, 0));
+    }
+    sql.finalize(st);
+    return ok(out);
+}
+
 pub fn list_followers(repo: SqliteSocialRepo, followee_id: str, limit: int) -> result[[user_domain.UserProfile], str] {
     let pr = sql.prepare(repo.db, "SELECT u.id, u.username, u.display_name, u.bio, u.avatar_path, u.website, u.location, u.pronouns, u.is_private, u.created_at FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ? AND u.deactivated_at = 0 ORDER BY f.created_at DESC LIMIT ?");
     guard let st = pr else let e = err_of(pr) {

@@ -226,6 +226,7 @@ pub fn resend_code(svc: UserService, email_raw: str) -> result[bool, str] {
 }
 
 pub fn signin(svc: UserService, login_raw: str, password: str) -> result[user_domain.AuthSession, str] {
+    let _purge = sqlite.purge_expired_sessions(svc.repo, now_secs());
     let login = strings.trim(login_raw);
     if len(login) == 0 || len(password) == 0 {
         return err(shared.invalid_argument);
@@ -542,4 +543,95 @@ pub fn deactivate(svc: UserService, token: str, password: str) -> result[bool, s
 
 pub fn last_dev_code(svc: UserService) -> str {
     return svc.mailer.last_code;
+}
+
+fn deliver_password_reset_email(mailer: email.Mailer, to_email: str, code: str) {
+    let r = email.send_password_reset(mailer, to_email, code);
+    guard let _ok = r else let e = err_of(r) {
+        log.warn("password reset email failed for " + to_email + ": " + e);
+        return;
+    }
+}
+
+pub fn forgot_password(svc: UserService, email_raw: str) -> result[bool, str] {
+    let email_addr = strings.trim(email_raw);
+    if !valid_email(email_addr) {
+        // Still generic — but invalid_email is useful for malformed input
+        return err(shared.invalid_email);
+    }
+    let ar = sqlite.find_auth_by_email(svc.repo, email_addr);
+    guard let row = ar else let e = err_of(ar) {
+        if e == shared.not_found {
+            return ok(true);
+        }
+        return err(e);
+    }
+    if row.deactivated_at != 0 {
+        return ok(true);
+    }
+    let cr = six_digit_code();
+    guard let code = cr else let e = err_of(cr) {
+        return err(e);
+    }
+    let idr = shared.new_id();
+    guard let rid = idr else let e = err_of(idr) {
+        return err(e);
+    }
+    let now = now_secs();
+    let code_hash = shared.hmac_str_hex(svc.pepper, code);
+    let ir = sqlite.insert_password_reset(svc.repo, rid, row.id, code_hash, now + 900, now);
+    guard let _ok = ir else let e = err_of(ir) {
+        return err(e);
+    }
+    svc.mailer.last_code = code;
+    spawn deliver_password_reset_email(svc.mailer, email_addr, code);
+    return ok(true);
+}
+
+pub fn reset_password(svc: UserService, email_raw: str, code_raw: str, new_password: str) -> result[bool, str] {
+    let email_addr = strings.trim(email_raw);
+    let code = strings.trim(code_raw);
+    if !valid_email(email_addr) {
+        return err(shared.invalid_email);
+    }
+    if len(code) != 6 {
+        return err(shared.invalid_code);
+    }
+    if len(new_password) < 8 {
+        return err(shared.weak_password);
+    }
+    let ar = sqlite.find_auth_by_email(svc.repo, email_addr);
+    guard let row = ar else let e = err_of(ar) {
+        if e == shared.not_found {
+            return err(shared.invalid_code);
+        }
+        return err(e);
+    }
+    let now = now_secs();
+    let code_hash = shared.hmac_str_hex(svc.pepper, code);
+    let rr = sqlite.find_open_password_reset(svc.repo, row.id, code_hash, now);
+    guard let rid = rr else let e = err_of(rr) {
+        if e == shared.invalid_argument || e == shared.not_found {
+            return err(shared.invalid_code);
+        }
+        return err(e);
+    }
+    let hr = shared.hash_password(svc.pepper, new_password);
+    guard let parts = hr else let e = err_of(hr) {
+        return err(e);
+    }
+    let ur = sqlite.update_password(svc.repo, row.id, parts[1], parts[0], now);
+    guard let _u = ur else let e = err_of(ur) {
+        return err(e);
+    }
+    let cr = sqlite.consume_password_reset(svc.repo, rid, now);
+    guard let _c = cr else let e = err_of(cr) {
+        return err(e);
+    }
+    let _rev = sqlite.revoke_all_sessions(svc.repo, row.id, now);
+    return ok(true);
+}
+
+pub fn sweep_expired_sessions(svc: UserService) -> result[int, str] {
+    return sqlite.purge_expired_sessions(svc.repo, now_secs());
 }

@@ -76,3 +76,22 @@ pub fn publish(hub: Hub, user_id: str, json_text: str) {
         // no live sockets for this user — fine
     }
 }
+
+// Publish to all of user_id's connections except except_conn_id (e.g. typing: no echo to same socket).
+pub fn publish_except(hub: Hub, user_id: str, except_conn_id: str, json_text: str) {
+    let targets: [chan[str]] = [];
+    mutex_lock(hub.lock);
+    for cid, uid in hub.owners {
+        if uid == user_id && cid != except_conn_id {
+            if has(hub.outs, cid) {
+                push(targets, hub.outs[cid]);
+            }
+        }
+    }
+    mutex_unlock(hub.lock);
+    let i = 0;
+    while i < len(targets) {
+        chan_send(targets[i], json_text);
+        i = i + 1;
+    }
+}

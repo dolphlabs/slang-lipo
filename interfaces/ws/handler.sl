@@ -5,6 +5,7 @@ import "log";
 import "strings";
 import "time";
 import "../../application/user" as user_app;
+import "../../application/chat" as chat_app;
 import "../../infrastructure/ws" as wslib;
 import "../../shared";
 
@@ -17,6 +18,55 @@ fn extract_auth_token(text: str) -> str {
         return "";
     }
     let key = "\"token\"";
+    let idx = strings.find(text, key);
+    if idx < 0 {
+        return "";
+    }
+    let rest = strings.slice(text, idx + len(key), len(text));
+    let colon = strings.find(rest, ":");
+    if colon < 0 {
+        return "";
+    }
+    rest = strings.slice(rest, colon + 1, len(rest));
+    let q1 = strings.find(rest, "\"");
+    if q1 < 0 {
+        return "";
+    }
+    rest = strings.slice(rest, q1 + 1, len(rest));
+    let q2 = strings.find(rest, "\"");
+    if q2 < 0 {
+        return "";
+    }
+    return strings.slice(rest, 0, q2);
+}
+
+
+fn extract_json_type(text: str) -> str {
+    let key = "\"type\"";
+    let idx = strings.find(text, key);
+    if idx < 0 {
+        return "";
+    }
+    let rest = strings.slice(text, idx + len(key), len(text));
+    let colon = strings.find(rest, ":");
+    if colon < 0 {
+        return "";
+    }
+    rest = strings.slice(rest, colon + 1, len(rest));
+    let q1 = strings.find(rest, "\"");
+    if q1 < 0 {
+        return "";
+    }
+    rest = strings.slice(rest, q1 + 1, len(rest));
+    let q2 = strings.find(rest, "\"");
+    if q2 < 0 {
+        return "";
+    }
+    return strings.slice(rest, 0, q2);
+}
+
+fn extract_json_str_field(text: str, field: str) -> str {
+    let key = "\"" + field + "\"";
     let idx = strings.find(text, key);
     if idx < 0 {
         return "";
@@ -88,7 +138,7 @@ fn send_err_and_close(c: &mut link, code: str) -> bool {
     return send_raw(&mut *c, wslib.encode_close(1008, code));
 }
 
-pub fn handle_websocket(users: user_app.UserService, hub: wslib.Hub, c: &mut link, req: http.Request, buf: wire, filled_in: int) {
+pub fn handle_websocket(users: user_app.UserService, chat: chat_app.ChatService, hub: wslib.Hub, c: &mut link, req: http.Request, buf: wire, filled_in: int) {
     if !wslib.is_upgrade_request(req) {
         let sa = arena_new(4096);
         let _wr = http.write(&mut *c, wslib.bad_upgrade_response(), &mut sa, until_never());
@@ -253,7 +303,29 @@ pub fn handle_websocket(users: user_app.UserService, hub: wslib.Hub, c: &mut lin
                     let _ok = send_text(&mut *c, "{\"type\":\"auth.ok\",\"payload\":{\"user_id\":\"" + user_id + "\"}}");
                     continue;
                 }
-                // Authenticated: ignore client application messages for now (server pushes only)
+                // Authenticated client emits: typing / chat.read
+                let mtype = extract_json_type(text);
+                if mtype == "typing" {
+                    let cid = extract_json_str_field(text, "conversation_id");
+                    if len(cid) > 0 {
+                        let tr = chat_app.emit_typing(chat, user_id, cid, conn_id);
+                        guard let _ok = tr else let e = err_of(tr) {
+                            let _discard = e;
+                        }
+                    }
+                    continue;
+                }
+                if mtype == "chat.read" {
+                    let cid = extract_json_str_field(text, "conversation_id");
+                    let mid = extract_json_str_field(text, "message_id");
+                    if len(cid) > 0 && len(mid) > 0 {
+                        let rr = chat_app.mark_read(chat, user_id, cid, mid);
+                        guard let _ok = rr else let e = err_of(rr) {
+                            let _discard = e;
+                        }
+                    }
+                    continue;
+                }
                 continue;
             }
         }

@@ -187,3 +187,70 @@ pub fn send_message(svc: ChatService, me_id: str, conversation_id: str, body_raw
     }
     return ok(msg);
 }
+
+gc struct TypingPayload {
+    conversation_id: str,
+    user_id: str
+}
+
+gc struct ChatReadPayload {
+    conversation_id: str,
+    message_id: str,
+    user_id: str
+}
+
+pub fn peer_id(conv: chat_domain.Conversation, me_id: str) -> str {
+    if conv.user_a_id == me_id {
+        return conv.user_b_id;
+    }
+    return conv.user_a_id;
+}
+
+pub fn emit_typing(svc: ChatService, me_id: str, conversation_id: str, except_conn_id: str) -> result[bool, str] {
+    let cr = sqlite.find_conversation_by_id(svc.repo, conversation_id);
+    guard let conv = cr else let e = err_of(cr) {
+        return err(e);
+    }
+    if !is_participant(conv, me_id) {
+        return err(shared.forbidden);
+    }
+    let peer = peer_id(conv, me_id);
+    let payload = TypingPayload {
+        conversation_id: conversation_id,
+        user_id: me_id
+    };
+    let text = "{\"type\":\"typing\",\"payload\":" + json.encode(payload) + "}";
+    wshub.publish(svc.hub, peer, text);
+    // Other devices of sender (optional): skip same conn
+    if len(except_conn_id) > 0 {
+        wshub.publish_except(svc.hub, me_id, except_conn_id, text);
+    }
+    return ok(true);
+}
+
+pub fn mark_read(svc: ChatService, me_id: str, conversation_id: str, message_id: str) -> result[bool, str] {
+    if len(message_id) == 0 {
+        return err(shared.invalid_argument);
+    }
+    let cr = sqlite.find_conversation_by_id(svc.repo, conversation_id);
+    guard let conv = cr else let e = err_of(cr) {
+        return err(e);
+    }
+    if !is_participant(conv, me_id) {
+        return err(shared.forbidden);
+    }
+    let now = now_secs();
+    let ur = sqlite.upsert_conversation_read(svc.repo, me_id, conversation_id, message_id, now);
+    guard let _u = ur else let e = err_of(ur) {
+        return err(e);
+    }
+    let peer = peer_id(conv, me_id);
+    let payload = ChatReadPayload {
+        conversation_id: conversation_id,
+        message_id: message_id,
+        user_id: me_id
+    };
+    let text = "{\"type\":\"chat.read\",\"payload\":" + json.encode(payload) + "}";
+    wshub.publish(svc.hub, peer, text);
+    return ok(true);
+}

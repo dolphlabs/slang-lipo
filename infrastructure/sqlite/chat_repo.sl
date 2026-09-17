@@ -220,3 +220,41 @@ pub fn list_messages(repo: SqliteChatRepo, conversation_id: str, limit: int, cur
     sql.finalize(st2);
     return ok(out2);
 }
+
+pub fn upsert_conversation_read(repo: SqliteChatRepo, user_id: str, conversation_id: str, message_id: str, updated_at: int) -> result[bool, str] {
+    let pr = sql.prepare(repo.db, "INSERT INTO conversation_reads (user_id, conversation_id, last_read_message_id, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, conversation_id) DO UPDATE SET last_read_message_id = excluded.last_read_message_id, updated_at = excluded.updated_at");
+    guard let st = pr else let e = err_of(pr) {
+        return err(e);
+    }
+    sql.bind_text(st, 1, user_id);
+    sql.bind_text(st, 2, conversation_id);
+    sql.bind_text(st, 3, message_id);
+    sql.bind_int(st, 4, updated_at);
+    let sr = sql.step(st);
+    sql.finalize(st);
+    guard let _done = sr else let e = err_of(sr) {
+        return err(e);
+    }
+    return ok(true);
+}
+
+pub fn get_conversation_read(repo: SqliteChatRepo, user_id: str, conversation_id: str) -> result[str, str] {
+    let pr = sql.prepare(repo.db, "SELECT last_read_message_id FROM conversation_reads WHERE user_id = ? AND conversation_id = ? LIMIT 1");
+    guard let st = pr else let e = err_of(pr) {
+        return err(e);
+    }
+    sql.bind_text(st, 1, user_id);
+    sql.bind_text(st, 2, conversation_id);
+    let sr = sql.step(st);
+    guard let more = sr else let e = err_of(sr) {
+        sql.finalize(st);
+        return err(e);
+    }
+    if !more {
+        sql.finalize(st);
+        return err(shared.not_found);
+    }
+    let mid = sql.col_text(st, 0);
+    sql.finalize(st);
+    return ok(mid);
+}

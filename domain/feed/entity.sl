@@ -11,7 +11,8 @@ pub struct FeedItem {
     created_at: i64,
     updated_at: i64,
     like_count: i64,
-    liked_by_me: bool
+    liked_by_me: bool,
+    media_url: str
 }
 
 pub struct FeedPage {
@@ -19,7 +20,7 @@ pub struct FeedPage {
     next_cursor: str
 }
 
-pub fn new_feed_item(id: str, author_id: str, author_username: str, author_display_name: str, author_avatar_path: str, body: str, created_at: int, updated_at: int, like_count: int, liked_by_me: bool) -> result[FeedItem, str] {
+pub fn new_feed_item(id: str, author_id: str, author_username: str, author_display_name: str, author_avatar_path: str, body: str, created_at: int, updated_at: int, like_count: int, liked_by_me: bool, media_url: str) -> result[FeedItem, str] {
     let a = shared.post_id(id);
     guard let pid = a else let e = err_of(a) { return err(e); }
     let b = shared.user_id(author_id);
@@ -34,7 +35,8 @@ pub fn new_feed_item(id: str, author_id: str, author_username: str, author_displ
         created_at: created_at as i64,
         updated_at: updated_at as i64,
         like_count: like_count as i64,
-        liked_by_me: liked_by_me
+        liked_by_me: liked_by_me,
+        media_url: media_url
     });
 }
 

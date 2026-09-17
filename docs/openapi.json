@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Lipo API",
-    "description": "Slang social-media backend (SQLite). Bearer tokens from POST /auth/signin. Error bodies are JSON `{ \"error\": \"<code>\", \"message\": \"<human sentence>\" }`. Social: follow/unfollow + like/unlike. Feed: home timeline. Chat: 1:1 DMs. Realtime: WebSocket at GET /ws?token= (RFC 6455).",
-    "version": "0.6.0",
+    "description": "Slang social-media backend (SQLite). Bearer tokens from POST /auth/signin. Error bodies are JSON `{ \"error\": \"<code>\", \"message\": \"<human sentence>\" }`. Social: follow/unfollow + like/unlike. Feed: home timeline. Chat: 1:1 DMs with typing/read. Realtime WS events: post.created, post.liked, user.followed, chat.message, typing, chat.read. Password reset + post media. Rate limits on auth and message send.",
+    "version": "0.7.0",
     "contact": {
       "name": "Lipo"
     }
@@ -309,6 +309,10 @@
           "like_count": {
             "type": "integer",
             "format": "int64"
+          },
+          "media_url": {
+            "type": "string",
+            "description": "Empty or /media/{id}"
           }
         }
       },
@@ -804,6 +808,73 @@
         "properties": {
           "body": {
             "type": "string"
+          }
+        }
+      },
+      "GenericOk": {
+        "type": "object",
+        "required": [
+          "ok",
+          "message"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "code",
+          "new_password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "code": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "MediaUploadJson": {
+        "type": "object",
+        "required": [
+          "data_base64",
+          "content_type"
+        ],
+        "properties": {
+          "data_base64": {
+            "type": "string"
+          },
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png"
+            ]
           }
         }
       }
@@ -2318,7 +2389,7 @@
           "Realtime"
         ],
         "summary": "WebSocket upgrade (RFC 6455)",
-        "description": "Upgrade with `Upgrade: websocket`. Auth via `?token=` (preferred) or first text frame `{\"type\":\"auth\",\"token\":\"...\"}`. Server pushes `chat.message` envelopes.",
+        "description": "RFC 6455 WebSocket. Auth via ?token= or first text {\"type\":\"auth\",\"token\":\"...\"}. Server pushes chat.message, post.created, post.liked, user.followed, typing, chat.read. Client may emit typing and chat.read after auth.",
         "parameters": [
           {
             "name": "token",
@@ -2335,6 +2406,236 @@
           },
           "400": {
             "description": "Invalid upgrade"
+          }
+        }
+      }
+    },
+    "/auth/password/forgot": {
+      "post": {
+        "summary": "Request password reset code",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Always generic success when email shape is valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericOk"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_email / invalid_json"
+          },
+          "429": {
+            "description": "rate_limited"
+          }
+        }
+      }
+    },
+    "/auth/password/reset": {
+      "post": {
+        "summary": "Reset password with email code",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password updated; sessions revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericOk"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "weak_password / invalid_code / \u2026"
+          },
+          "429": {
+            "description": "rate_limited"
+          }
+        }
+      }
+    },
+    "/posts/{id}/media": {
+      "put": {
+        "summary": "Attach image to post (multipart media or JSON base64)",
+        "tags": [
+          "Posts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "media": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaUploadJson"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated post",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_media"
+          },
+          "401": {
+            "description": "unauthorized"
+          },
+          "403": {
+            "description": "forbidden"
+          }
+        }
+      },
+      "post": {
+        "summary": "Attach image to post (alias of PUT)",
+        "tags": [
+          "Posts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "media": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaUploadJson"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated post",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_media"
+          },
+          "401": {
+            "description": "unauthorized"
+          },
+          "403": {
+            "description": "forbidden"
+          }
+        }
+      }
+    },
+    "/media/{id}": {
+      "get": {
+        "summary": "Serve post media bytes",
+        "tags": [
+          "Posts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "image/jpeg or image/png",
+            "content": {
+              "image/jpeg": {},
+              "image/png": {}
+            }
+          },
+          "404": {
+            "description": "not_found"
           }
         }
       }

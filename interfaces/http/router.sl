@@ -21,6 +21,8 @@ pub fn register() -> [str] {
         "POST /auth/signup",
         "POST /auth/verify",
         "POST /auth/signin",
+        "POST /auth/password/forgot",
+        "POST /auth/password/reset",
         "GET /auth/me",
         "POST /auth/logout",
         "GET /users/:username",
@@ -46,6 +48,9 @@ pub fn register() -> [str] {
         "DELETE /posts/:id",
         "POST /posts/:id/like",
         "DELETE /posts/:id/like",
+        "PUT /posts/:id/media",
+        "POST /posts/:id/media",
+        "GET /media/:id",
         "GET /feed",
         "POST /chats/dm",
         "GET /chats",
@@ -78,6 +83,12 @@ pub fn dispatch(svc: user_app.UserService, post_svc: post_app.PostService, socia
     }
     if path == "/auth/signin" && req.method == "POST" {
         return handle_signin(svc, req);
+    }
+    if path == "/auth/password/forgot" && req.method == "POST" {
+        return handle_forgot_password(svc, req);
+    }
+    if path == "/auth/password/reset" && req.method == "POST" {
+        return handle_reset_password(svc, req);
     }
     if path == "/auth/me" && req.method == "GET" {
         return handle_me(svc, req);
@@ -176,6 +187,16 @@ pub fn dispatch(svc: user_app.UserService, post_svc: post_app.PostService, socia
             return handle_unlike(svc, social_svc, req, id);
         }
         return http.method_not_allowed();
+    }
+    if len(parts) == 4 && parts[1] == "posts" && parts[3] == "media" {
+        let id = parts[2];
+        if req.method == "PUT" || req.method == "POST" {
+            return handle_post_media(svc, post_svc, req, id);
+        }
+        return http.method_not_allowed();
+    }
+    if len(parts) == 3 && parts[1] == "media" && req.method == "GET" {
+        return handle_get_media(post_svc, parts[2]);
     }
     if len(parts) == 3 && parts[1] == "posts" {
         let id = parts[2];

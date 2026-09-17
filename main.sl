@@ -19,6 +19,7 @@ import "infrastructure/http" as httpserver;
 import "infrastructure/ws" as wshub;
 import "infrastructure/email" as email;
 import "infrastructure/storage" as storage;
+import "infrastructure/ratelimit" as ratelimit;
 import "interfaces/http" as rest;
 
 fn boot() {
@@ -50,17 +51,18 @@ fn boot() {
     let user_repo = sqlite.new_user_repo(db);
     let mailer = email.new_mailer(cfg.resend_api_key, cfg.resend_from, cfg.mail_dev);
     let user_svc = user_app.new_service(user_repo, mailer, cfg.auth_pepper, cfg.upload_dir);
+    let _sweep = user_app.sweep_expired_sessions(user_svc);
+
+    let hub = wshub.new_hub();
 
     let post_repo = sqlite.new_post_repo(db);
-    let post_svc = post_app.new_service(post_repo, user_repo);
-
     let social_repo = sqlite.new_social_repo(db);
-    let social_svc = social_app.new_service(social_repo, user_repo, post_repo);
+    let post_svc = post_app.new_service(post_repo, user_repo, social_repo, hub, cfg.upload_dir);
+    let social_svc = social_app.new_service(social_repo, user_repo, post_repo, hub);
 
     let feed_repo = sqlite.new_feed_repo(db);
     let feed_svc = feed_app.new_service(feed_repo);
 
-    let hub = wshub.new_hub();
     let chat_repo = sqlite.new_chat_repo(db);
     let chat_svc = chat_app.new_service(chat_repo, user_repo, hub);
 
@@ -71,6 +73,9 @@ fn boot() {
     log.info("routes:");
     rest.print_routes();
 
+    // Auth: capacity 10, refill 1 token / 6s (~10/min). Messages: 30 capacity, 1/2s (~30/min).
+    let auth_limiter = ratelimit.new_limiter(10, 1);
+    let msg_limiter = ratelimit.new_limiter(30, 1);
     let app = httpserver.App {
         svc: user_svc,
         post_svc: post_svc,
@@ -78,6 +83,8 @@ fn boot() {
         feed_svc: feed_svc,
         chat_svc: chat_svc,
         hub: hub,
+        auth_limiter: auth_limiter,
+        msg_limiter: msg_limiter,
         port: cfg.http_port,
         addr: cfg.http_addr
     };

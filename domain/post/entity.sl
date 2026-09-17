@@ -6,7 +6,8 @@ pub struct Post {
     body: str,
     created_at: int,
     updated_at: int,
-    like_count: int
+    like_count: int,
+    media_path: str
 }
 
 pub struct PostPublic {
@@ -15,13 +16,21 @@ pub struct PostPublic {
     body: str,
     created_at: i64,
     updated_at: i64,
-    like_count: i64
+    like_count: i64,
+    media_url: str
 }
 
 impl Post {
     fn has_body(self: Post) -> bool {
         return len(self.body) > 0;
     }
+}
+
+pub fn media_url_of(p: Post) -> str {
+    if len(p.media_path) == 0 {
+        return "";
+    }
+    return "/media/" + p.id;
 }
 
 pub fn to_public(p: Post) -> PostPublic {
@@ -31,7 +40,8 @@ pub fn to_public(p: Post) -> PostPublic {
         body: p.body,
         created_at: p.created_at as i64,
         updated_at: p.updated_at as i64,
-        like_count: p.like_count as i64
+        like_count: p.like_count as i64,
+        media_url: media_url_of(p)
     };
 }
 
@@ -53,7 +63,8 @@ pub fn new_post(id: str, author_id: str, body: str, created_at: int) -> result[P
         body: body,
         created_at: created_at,
         updated_at: created_at,
-        like_count: 0
+        like_count: 0,
+        media_path: ""
     };
     if !p.has_body() {
         return err(shared.invalid_argument);

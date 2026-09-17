@@ -125,5 +125,57 @@ pub fn migrate(db: rawptr) -> result[bool, str] {
             k = k + 1;
         }
     }
+
+    // v5: conversation read receipts
+    if version < 5 {
+        let stmts5: [str] = [
+            "CREATE TABLE IF NOT EXISTS conversation_reads (user_id TEXT NOT NULL, conversation_id TEXT NOT NULL, last_read_message_id TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL, PRIMARY KEY (user_id, conversation_id))",
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (5, 0)"
+        ];
+        let m = 0;
+        while m < len(stmts5) {
+            let er5 = exec_one(db, stmts5[m]);
+            guard let _ok5 = er5 else let e = err_of(er5) {
+                return err(e);
+            }
+            m = m + 1;
+        }
+        version = 5;
+    }
+
+
+    // v6: password reset codes
+    if version < 6 {
+        let stmts6: [str] = [
+            "CREATE TABLE IF NOT EXISTS password_resets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, consumed_at INTEGER, created_at INTEGER NOT NULL)",
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (6, 0)"
+        ];
+        let n6 = 0;
+        while n6 < len(stmts6) {
+            let er6 = exec_one(db, stmts6[n6]);
+            guard let _ok6 = er6 else let e = err_of(er6) {
+                return err(e);
+            }
+            n6 = n6 + 1;
+        }
+        version = 6;
+    }
+
+
+    // v7: post media path
+    if version < 7 {
+        let ar7 = exec_one(db, "ALTER TABLE posts ADD COLUMN media_path TEXT NOT NULL DEFAULT ''");
+        guard let _alt7 = ar7 else let e = err_of(ar7) {
+            if !strings.contains(e, "duplicate column") {
+                return err(e);
+            }
+        }
+        let ir7 = exec_one(db, "INSERT INTO schema_migrations (version, applied_at) VALUES (7, 0)");
+        guard let _ok7 = ir7 else let e = err_of(ir7) {
+            return err(e);
+        }
+        version = 7;
+    }
+
     return ok(true);
 }

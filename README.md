@@ -1,160 +1,116 @@
 # Lipo
 
-Lipo is a social-media **backend** written in [Slang](https://slang.dolphlabs.com/). It exposes a REST API (SQLite) plus **WebSockets** for realtime (including 1:1 DMs).
-
-This README is the living overview — update it whenever a module lands or an endpoint changes.
-
-| | |
-|---|---|
-| **Language** | [Slang](https://slang.dolphlabs.com/) (`slangc`) |
-| **API** | HTTP/JSON REST · OpenAPI `docs/openapi.json` (**v0.6.0**) |
-| **Realtime** | WebSocket `GET /ws` (RFC 6455 over `link`) |
-| **Store** | SQLite (`LIPO_DB_PATH`, default `lipo.db`) · schema **v4** |
-| **Mail** | [Resend](https://resend.com/) via `httpc` (or mail-dev logging) |
-| **Layout** | DDD · plain `struct` for DTOs · `gc struct` for services/repos |
-| **Repo** | [dolphlabs/slang-lipo](https://github.com/dolphlabs/slang-lipo) |
-
----
+Slang social-media backend (SQLite): auth, profiles, posts (+ media), social graph, home feed, 1:1 DMs, WebSockets, password reset.
 
 ## Status
 
-### Done
+| Area | Status |
+|------|--------|
+| Auth (signup / verify / signin / session) | Done |
+| Password forgot / reset | Done |
+| Profile + avatar + settings | Done |
+| Posts + likes + media | Done |
+| Follow graph | Done |
+| Home feed (cursor pagination) | Done |
+| WebSocket `/ws` (RFC 6455) | Done |
+| Realtime: `post.created` / `post.liked` / `user.followed` | Done |
+| 1:1 chats / DMs + typing / read | Done |
+| Rate limits (auth + message send) | Done |
+| Session expiry sweep | Done |
 
-- [x] Scaffold + DDD tree
-- [x] Auth (signup / verify / signin / sessions / logout / me)
-- [x] Profile, settings, avatar (multipart file upload), password/email change, deactivate
-- [x] Posts CRUD
-- [x] Social (follow / like)
-- [x] Home feed (cursor pagination)
-- [x] Standardized `{error, message}` errors
-- [x] OpenAPI living spec
-- [x] **WebSockets** (`/ws?token=…`)
-- [x] **1:1 chats / DMs** (REST + live `chat.message` pushes)
+Schema migrations currently at **v7** (`conversation_reads`, `password_resets`, `posts.media_path`).
 
-### Next
-
-- [ ] Password reset
-- [ ] Richer notifications / more realtime event types (likes, follows, …)
-- [ ] Media on posts
-- [ ] Hardening (rate limits, production deploy notes)
-
----
-
-## Architecture
-
-```
-lipo/
-├── main.sl
-├── config/                 # env + .env loader
-├── shared/                 # ids, password, errors, sha1 (WS Accept)
-├── domain/                 # user, post, social, feed, chat, realtime
-├── application/            # use-cases
-├── infrastructure/
-│   ├── sqlite/             # repos + migrations (v4: conversations/messages)
-│   ├── email/              # Resend / mail-dev
-│   ├── storage/            # avatars
-│   ├── http/               # TCP server
-│   ├── httpread/           # Expect:100-continue + O(n) body copy
-│   └── ws/                 # handshake, frames, hub
-├── interfaces/
-│   ├── http/               # REST routes (incl. chats)
-│   └── ws/                 # WS session handler
-└── docs/openapi.json
-```
-
-**`struct` vs `gc struct`:** plain `struct` for entities/DTOs; `gc struct` for services, repos, hub.
-
----
-
-## Quick start
+## Run
 
 ```bash
-cd /path/to/lipo
-cp .env.example .env   # only if missing — never clobber a filled .env
-make run               # slangc main.sl --run
+cp .env.example .env   # set LIPO_AUTH_PEPPER
+slangc main.sl --run
+# or: make run
 ```
 
-Health: `curl -s http://127.0.0.1:8080/health`
+Default: `http://0.0.0.0:8080` (`LIPO_HTTP_PORT`).
 
-**Never delete or overwrite `.env` when syncing code.**
-
-### Smoke
-
-```bash
-slangc smoke_chat/main.sl -o smoke_chat_bin && LIPO_MAIL_DEV=1 ./smoke_chat_bin
-```
-
-(`smoke_*` folders are gitignored — keep them locally.)
-
----
-
-## Configuration
-
-| Variable | Notes |
-|----------|--------|
-| `LIPO_DB_PATH` | default `lipo.db` |
-| `LIPO_HTTP_ADDR` / `LIPO_HTTP_PORT` | default `0.0.0.0:8080` |
-| `LIPO_UPLOAD_DIR` | default `data/uploads` |
-| `LIPO_AUTH_PEPPER` | password HMAC pepper |
-| `LIPO_MAIL_DEV` | `1` = log codes; `0` = Resend when key set |
-| `RESEND_API_KEY` / `RESEND_FROM` | mail |
-
----
-
-## API overview
-
-Full contract: [`docs/openapi.json`](docs/openapi.json). Auth: `Authorization: Bearer <token>`.
-
-Errors: `{ "error": "<code>", "message": "<sentence>" }`.
-
-### Auth / profile / posts / social / feed
-
-See OpenAPI tags **Auth**, **Profile**, **Posts**, **Social**, **Feed**. Avatar: multipart field `avatar` (or raw `image/*` body) — not base64 JSON. Server answers `Expect: 100-continue` (Apidog).
-
-### Chats (REST)
+## HTTP API (Bearer)
 
 | Method | Path | Notes |
-|--------|------|--------|
-| `POST` | `/chats/dm` | `{ "username" }` create-or-get 1:1 |
-| `GET` | `/chats` | list my conversations |
-| `GET` | `/chats/:id/messages` | `?limit=&cursor=` |
-| `POST` | `/chats/:id/messages` | `{ "body" }` persist + WS push to both users |
+|--------|------|-------|
+| GET | `/health` | Liveness |
+| POST | `/auth/signup` | `{email,username,password}` |
+| POST | `/auth/verify` | `{email,code}` |
+| POST | `/auth/signin` | `{login,password}` → `{token,user}` |
+| POST | `/auth/password/forgot` | `{email}` — always generic success |
+| POST | `/auth/password/reset` | `{email,code,new_password}` |
+| GET | `/auth/me` | Current user |
+| POST | `/auth/logout` | Revoke session |
+| GET/PATCH | `/me`, `/me/profile`, `/me/settings`, … | Profile |
+| POST/GET/PATCH/DELETE | `/posts`, `/posts/:id` | Posts |
+| PUT/POST | `/posts/:id/media` | Multipart field `media` or JSON `{data_base64,content_type}` (jpeg/png ≤2MB) |
+| GET | `/media/:id` | Serve post image |
+| POST/DELETE/GET | `/users/:username/follow` | Follow |
+| POST/DELETE | `/posts/:id/like` | Likes |
+| GET | `/feed` | Home timeline |
+| POST | `/chats/dm` | `{username}` create-or-get DM |
+| GET | `/chats` | List conversations |
+| GET | `/chats/:id/messages` | `?limit=&cursor=` |
+| POST | `/chats/:id/messages` | `{body}` persist + WS push |
 
----
+Errors: JSON `{ "error": "<code>", "message": "<human>" }` (see `shared/errors.sl`).
+
+OpenAPI: `docs/openapi.json` (v0.7.0).
+
+### Rate limiting
+
+In-memory token buckets (per process):
+
+- **Auth** (`/auth/signin`, `/signup`, `/password/forgot`, `/password/reset`): capacity 10, refill ~1/s, keyed by path+body prefix → HTTP **429** `rate_limited`.
+- **Message send** (`POST …/messages`): capacity 30, refill ~1/s, keyed by `Authorization` header prefix.
+
+### Sessions
+
+Expired sessions are revoked on boot and opportunistically on sign-in.
 
 ## WebSocket
+
+Connect after sign-in:
 
 ```
 ws://localhost:8080/ws?token=<session_token>
 ```
 
-Fallback: connect then send text frame `{"type":"auth","token":"..."}` → `auth.ok`.
+Preferred auth is the `token` query param (same hex session token as `Authorization: Bearer`).
 
-Live push example:
+Fallback: connect without token, then send a text frame:
 
 ```json
-{
-  "type": "chat.message",
-  "payload": {
-    "id": "...",
-    "conversation_id": "...",
-    "sender_id": "...",
-    "body": "hello",
-    "created_at": 0
-  }
-}
+{"type":"auth","token":"<session_token>"}
 ```
 
-`POST /chats/:id/messages` publishes that envelope to **both** participants’ connections (hub keyed by `user_id`). Ping/pong and close are handled. Pure RFC 6455 over `link` (no stdlib WS package); Accept uses `shared/sha1.sl` + base64.
+Server replies with `{"type":"auth.ok","payload":{"user_id":"..."}}` on success, or closes with an error envelope.
 
----
+### Server → client events
 
-## Keeping docs honest
+Envelope shape: `{"type":"...","payload":{...}}`
 
-When routes change: implement → bump OpenAPI → update this README → prefer a smoke path.
+| type | When |
+|------|------|
+| `chat.message` | New DM (REST send) |
+| `post.created` | New post → author + followers |
+| `post.liked` | Like → post author (+ liker) |
+| `user.followed` | Follow → followee |
+| `typing` | Peer is typing |
+| `chat.read` | Peer marked read |
 
----
+### Client → server (after auth)
 
-## License / attribution
+```json
+{"type":"typing","payload":{"conversation_id":"..."}}
+{"type":"chat.read","payload":{"conversation_id":"...","message_id":"..."}}
+```
 
-Dolph Labs (`dolphlabs/slang-lipo`). Built with Slang — [slang.dolphlabs.com](https://slang.dolphlabs.com/).
+`typing` is relayed to the other participant (and other devices of the sender; not echoed on the same connection). `chat.read` persists `conversation_reads` and pushes `chat.read` to the peer.
+
+Ping/pong and close frames are handled. Implementation is pure RFC 6455 over `link` (no stdlib WebSocket package); Accept uses `shared/sha1.sl` + base64.
+
+## Layout
+
+DDD-ish packages: `domain/`, `application/`, `infrastructure/`, `interfaces/`, `shared/`, `config/`.

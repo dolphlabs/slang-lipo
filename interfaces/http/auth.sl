@@ -101,6 +101,9 @@ fn status_text_of(status: i32) -> str {
     if status == 409 {
         return "Conflict";
     }
+    if status == 429 {
+        return "Too Many Requests";
+    }
     return "Internal Server Error";
 }
 
@@ -213,4 +216,53 @@ pub fn handle_logout(svc: user_app.UserService, req: http.Request) -> http.Respo
 
 pub fn me_dto_json(u_id: str, email: str, username: str, display_name: str, bio: str, avatar_path: str, website: str, location: str, pronouns: str, is_private: bool, show_email: bool, allow_dms: bool, notify_likes: bool, notify_follows: bool, notify_mentions: bool, email_verified: bool, created_at: i64, updated_at: i64, deactivated_at: i64) -> str {
     return json.encode(dto_from_fields(u_id, email, username, display_name, bio, avatar_path, website, location, pronouns, is_private, show_email, allow_dms, notify_likes, notify_follows, notify_mentions, email_verified, created_at, updated_at, deactivated_at));
+}
+
+gc struct ForgotReq {
+    email: str
+}
+
+gc struct ResetReq {
+    email: str,
+    code: str,
+    new_password: str
+}
+
+gc struct GenericOk {
+    ok: bool,
+    message: str
+}
+
+pub fn handle_forgot_password(svc: user_app.UserService, req: http.Request) -> http.Response {
+    let dr: result[ForgotReq, str] = json.decode(req.body);
+    guard let body = dr else let e = err_of(dr) {
+        return bad_request_json(shared.invalid_json);
+    }
+    let rr = user_app.forgot_password(svc, body.email);
+    guard let _ok = rr else let e = err_of(rr) {
+        // Only surface malformed email; existence stays generic
+        if e == shared.invalid_email || e == shared.invalid_json {
+            return map_err(e);
+        }
+        return map_err(e);
+    }
+    return http.ok_json(json.encode(GenericOk {
+        ok: true,
+        message: "If that email is registered, a reset code has been sent."
+    }));
+}
+
+pub fn handle_reset_password(svc: user_app.UserService, req: http.Request) -> http.Response {
+    let dr: result[ResetReq, str] = json.decode(req.body);
+    guard let body = dr else let e = err_of(dr) {
+        return bad_request_json(shared.invalid_json);
+    }
+    let rr = user_app.reset_password(svc, body.email, body.code, body.new_password);
+    guard let _ok = rr else let e = err_of(rr) {
+        return map_err(e);
+    }
+    return http.ok_json(json.encode(GenericOk {
+        ok: true,
+        message: "Password updated."
+    }));
 }

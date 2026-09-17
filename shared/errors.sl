@@ -10,6 +10,8 @@ pub let weak_password = "weak_password";
 pub let invalid_code = "invalid_code";
 pub let invalid_cursor = "invalid_cursor";
 pub let invalid_avatar = "invalid_avatar";
+pub let invalid_media = "invalid_media";
+pub let rate_limited = "rate_limited";
 pub let empty_post_body = "empty_post_body";
 pub let empty_message = "empty_message";
 
@@ -58,6 +60,12 @@ pub fn message_of(code: str) -> str {
     }
     if code == invalid_avatar {
         return "Avatar must be a JPEG or PNG image under 2MB.";
+    }
+    if code == invalid_media {
+        return "Media must be a JPEG or PNG image under 2MB.";
+    }
+    if code == rate_limited {
+        return "Too many requests. Please slow down.";
     }
     if code == empty_post_body {
         return "Post body cannot be empty.";
@@ -114,8 +122,11 @@ pub fn status_of(code: str) -> i32 {
     if code == invalid_email || code == invalid_username || code == weak_password {
         return 400;
     }
-    if code == invalid_code || code == invalid_cursor || code == invalid_avatar {
+    if code == invalid_code || code == invalid_cursor || code == invalid_avatar || code == invalid_media {
         return 400;
+    }
+    if code == rate_limited {
+        return 429;
     }
     if code == empty_post_body || code == empty_message || code == cannot_follow_self {
         return 400;

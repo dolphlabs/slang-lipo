@@ -106,3 +106,41 @@ pub fn content_type_for_path(path: str) -> str {
     }
     return "image/jpeg";
 }
+
+pub fn path_for_post(upload_dir: str, post_id: str, ext: str) -> str {
+    return upload_dir + "/posts/" + post_id + "." + ext;
+}
+
+pub fn write_post_media(upload_dir: str, post_id: str, ext: str, data: bytes) -> result[str, str] {
+    let dir = upload_dir + "/posts";
+    let er = ensure_dir(dir);
+    guard let _ok = er else let e = err_of(er) {
+        return err(e);
+    }
+    let path = path_for_post(upload_dir, post_id, ext);
+    let other = "png";
+    if ext == "png" {
+        other = "jpg";
+    }
+    let other_path = path_for_post(upload_dir, post_id, other);
+    if os.is_file(other_path) {
+        let rr = os.remove(other_path);
+        guard let _discard_rm = rr else let _e = err_of(rr) {
+            let _discard_err = _e;
+        }
+    }
+    let cr = fs.create(path);
+    guard let fd = cr else let e = err_of(cr) {
+        return err(e);
+    }
+    let wr = fs.write(fd, data);
+    guard let _n = wr else let e = err_of(wr) {
+        let _discard_close = fs.close(fd);
+        return err(e);
+    }
+    let clr = fs.close(fd);
+    guard let _c = clr else let e = err_of(clr) {
+        return err(e);
+    }
+    return ok(path);
+}

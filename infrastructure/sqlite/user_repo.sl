@@ -463,3 +463,73 @@ pub fn revoke_all_sessions(repo: SqliteUserRepo, user_id: str, now: int) -> resu
     }
     return ok(true);
 }
+
+pub fn insert_password_reset(repo: SqliteUserRepo, id: str, user_id: str, code_hash: str, expires_at: int, created_at: int) -> result[bool, str] {
+    let pr = sql.prepare(repo.db, "INSERT INTO password_resets (id, user_id, code_hash, expires_at, consumed_at, created_at) VALUES (?, ?, ?, ?, NULL, ?)");
+    guard let st = pr else let e = err_of(pr) {
+        return err(e);
+    }
+    sql.bind_text(st, 1, id);
+    sql.bind_text(st, 2, user_id);
+    sql.bind_text(st, 3, code_hash);
+    sql.bind_int(st, 4, expires_at);
+    sql.bind_int(st, 5, created_at);
+    let sr = sql.step(st);
+    sql.finalize(st);
+    guard let _done = sr else let e = err_of(sr) {
+        return err(e);
+    }
+    return ok(true);
+}
+
+pub fn find_open_password_reset(repo: SqliteUserRepo, user_id: str, code_hash: str, now: int) -> result[str, str] {
+    let pr = sql.prepare(repo.db, "SELECT id FROM password_resets WHERE user_id = ? AND code_hash = ? AND consumed_at IS NULL AND expires_at >= ? ORDER BY created_at DESC LIMIT 1");
+    guard let st = pr else let e = err_of(pr) {
+        return err(e);
+    }
+    sql.bind_text(st, 1, user_id);
+    sql.bind_text(st, 2, code_hash);
+    sql.bind_int(st, 3, now);
+    let sr = sql.step(st);
+    guard let more = sr else let e = err_of(sr) {
+        sql.finalize(st);
+        return err(e);
+    }
+    if !more {
+        sql.finalize(st);
+        return err(shared.invalid_argument);
+    }
+    let rid = sql.col_text(st, 0);
+    sql.finalize(st);
+    return ok(rid);
+}
+
+pub fn consume_password_reset(repo: SqliteUserRepo, id: str, now: int) -> result[bool, str] {
+    let pr = sql.prepare(repo.db, "UPDATE password_resets SET consumed_at = ? WHERE id = ?");
+    guard let st = pr else let e = err_of(pr) {
+        return err(e);
+    }
+    sql.bind_int(st, 1, now);
+    sql.bind_text(st, 2, id);
+    let sr = sql.step(st);
+    sql.finalize(st);
+    guard let _done = sr else let e = err_of(sr) {
+        return err(e);
+    }
+    return ok(true);
+}
+
+pub fn purge_expired_sessions(repo: SqliteUserRepo, now: int) -> result[int, str] {
+    let pr = sql.prepare(repo.db, "UPDATE sessions SET revoked_at = ? WHERE revoked_at IS NULL AND expires_at < ?");
+    guard let st = pr else let e = err_of(pr) {
+        return err(e);
+    }
+    sql.bind_int(st, 1, now);
+    sql.bind_int(st, 2, now);
+    let sr = sql.step(st);
+    sql.finalize(st);
+    guard let _done = sr else let e = err_of(sr) {
+        return err(e);
+    }
+    return ok(0);
+}

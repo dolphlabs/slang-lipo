@@ -15,7 +15,8 @@ gc struct FeedItemDto {
     created_at: i64,
     updated_at: i64,
     like_count: i64,
-    liked_by_me: bool
+    liked_by_me: bool,
+    media_url: str
 }
 
 gc struct FeedPageDto {
@@ -38,7 +39,8 @@ fn item_dto(it: feed_domain.FeedItem) -> FeedItemDto {
         created_at: it.created_at,
         updated_at: it.updated_at,
         like_count: it.like_count,
-        liked_by_me: it.liked_by_me
+        liked_by_me: it.liked_by_me,
+        media_url: it.media_url
     };
 }
 
