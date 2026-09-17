@@ -1,0 +1,18 @@
+# slangc writes the binary next to the source it compiled,
+# and keeps generated C only with --keep-c.
+main
+smoke_auth/main
+smoke_profile/main
+smoke_posts/main
+smoke_social/main
+smoke_auth_bin
+smoke_profile_bin
+smoke_posts_bin
+smoke_social_bin
+*.gen.c
+lipo.db
+*.db
+data/
+.DS_Store
+.env
+.env.local

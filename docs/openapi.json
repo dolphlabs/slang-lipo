@@ -1,0 +1,1917 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Lipo API",
+    "description": "Slang social-media backend (SQLite). Bearer tokens from POST /auth/signin. Error bodies are JSON `{ \"error\": \"<code>\" }` unless noted. Common error codes: `invalid_argument`, `unauthorized`, `forbidden`, `email_unverified`, `conflict`, `not_found`, `internal`. Social: follow/unfollow + like/unlike. Feed: home timeline of followed users (+ own posts).",
+    "version": "0.4.0",
+    "contact": {
+      "name": "Lipo"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local default (LIPO_HTTP_PORT)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Liveness"
+    },
+    {
+      "name": "Auth",
+      "description": "Signup, email verification, sign-in, session"
+    },
+    {
+      "name": "Profile",
+      "description": "Public profiles, edit account, avatar, settings"
+    },
+    {
+      "name": "Posts",
+      "description": "Create and manage posts"
+    },
+    {
+      "name": "Social",
+      "description": "Follow graph and post likes"
+    },
+    {
+      "name": "Feed",
+      "description": "Home timeline for the authenticated user"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "hex",
+        "description": "Session token from POST /auth/signin. Header: `Authorization: Bearer <token>`."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable error code or message",
+            "examples": [
+              "invalid_argument",
+              "unauthorized",
+              "conflict"
+            ]
+          }
+        }
+      },
+      "Ok": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "examples": [
+              true
+            ]
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "description": "Authenticated user card (includes email). Returned by /auth/me and /me/* mutations.",
+        "required": [
+          "id",
+          "email",
+          "username",
+          "display_name",
+          "bio",
+          "avatar_path",
+          "website",
+          "location",
+          "pronouns",
+          "is_private",
+          "show_email",
+          "allow_dms",
+          "notify_likes",
+          "notify_follows",
+          "notify_mentions",
+          "email_verified",
+          "created_at",
+          "updated_at",
+          "deactivated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 32,
+            "pattern": "^[A-Za-z0-9_]+$"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "avatar_path": {
+            "type": "string",
+            "description": "Server-relative path when set; empty string if none"
+          },
+          "website": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "pronouns": {
+            "type": "string"
+          },
+          "is_private": {
+            "type": "boolean"
+          },
+          "show_email": {
+            "type": "boolean"
+          },
+          "allow_dms": {
+            "type": "boolean"
+          },
+          "notify_likes": {
+            "type": "boolean"
+          },
+          "notify_follows": {
+            "type": "boolean"
+          },
+          "notify_mentions": {
+            "type": "boolean"
+          },
+          "email_verified": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds; 0 if never updated"
+          },
+          "deactivated_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds; 0 if active"
+          }
+        }
+      },
+      "UserProfile": {
+        "type": "object",
+        "description": "Public profile card. Email is always omitted.",
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "bio",
+          "avatar_path",
+          "website",
+          "location",
+          "pronouns",
+          "is_private",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "avatar_path": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "pronouns": {
+            "type": "string"
+          },
+          "is_private": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "UserSettings": {
+        "type": "object",
+        "required": [
+          "is_private",
+          "show_email",
+          "allow_dms",
+          "notify_likes",
+          "notify_follows",
+          "notify_mentions"
+        ],
+        "properties": {
+          "is_private": {
+            "type": "boolean"
+          },
+          "show_email": {
+            "type": "boolean"
+          },
+          "allow_dms": {
+            "type": "boolean"
+          },
+          "notify_likes": {
+            "type": "boolean"
+          },
+          "notify_follows": {
+            "type": "boolean"
+          },
+          "notify_mentions": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Post": {
+        "type": "object",
+        "required": [
+          "id",
+          "author_id",
+          "body",
+          "created_at",
+          "updated_at",
+          "like_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "author_id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "like_count": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PostsList": {
+        "type": "object",
+        "required": [
+          "posts"
+        ],
+        "properties": {
+          "posts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Post"
+            }
+          }
+        }
+      },
+      "SignupRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "username",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 32,
+            "description": "Unique; [A-Za-z0-9_]"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "minLength": 8
+          }
+        }
+      },
+      "SignupResponse": {
+        "type": "object",
+        "required": [
+          "user",
+          "verification_sent"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "verification_sent": {
+            "type": "boolean",
+            "description": "True when verification email was accepted by mailer (or logged in mail-dev mode)"
+          }
+        }
+      },
+      "VerifyRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "code"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 6,
+            "description": "6-digit email verification code"
+          }
+        }
+      },
+      "SigninRequest": {
+        "type": "object",
+        "required": [
+          "login",
+          "password"
+        ],
+        "properties": {
+          "login": {
+            "type": "string",
+            "description": "Email or username"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        }
+      },
+      "SigninResponse": {
+        "type": "object",
+        "required": [
+          "token",
+          "user"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Opaque hex session token for BearerAuth"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        }
+      },
+      "ProfilePatch": {
+        "type": "object",
+        "description": "Partial update; omit fields to leave unchanged (JSON null / missing \u2192 unchanged).",
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "website": {
+            "type": "string",
+            "nullable": true
+          },
+          "location": {
+            "type": "string",
+            "nullable": true
+          },
+          "pronouns": {
+            "type": "string",
+            "nullable": true
+          },
+          "username": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 3,
+            "maxLength": 32
+          }
+        }
+      },
+      "AvatarUpload": {
+        "type": "object",
+        "required": [
+          "content_type",
+          "data_base64"
+        ],
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "description": "Must match file magic (JPEG/PNG)"
+          },
+          "data_base64": {
+            "type": "string",
+            "format": "byte",
+            "description": "Standard base64 image bytes; max ~2MB decoded"
+          }
+        }
+      },
+      "PasswordChange": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "format": "password"
+          },
+          "new_password": {
+            "type": "string",
+            "format": "password",
+            "minLength": 8
+          }
+        }
+      },
+      "EmailChange": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "New email; triggers re-verification"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "description": "Current account password"
+          }
+        }
+      },
+      "DeactivateRequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        }
+      },
+      "PostBody": {
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "examples": [
+              "ok"
+            ]
+          }
+        }
+      },
+      "Follow": {
+        "type": "object",
+        "required": [
+          "follower_id",
+          "followee_id",
+          "created_at"
+        ],
+        "properties": {
+          "follower_id": {
+            "type": "string"
+          },
+          "followee_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Like": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "post_id",
+          "created_at"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "post_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "FollowingStatus": {
+        "type": "object",
+        "required": [
+          "following"
+        ],
+        "properties": {
+          "following": {
+            "type": "boolean",
+            "description": "True if the authenticated requester follows the user. False when unauthenticated."
+          }
+        }
+      },
+      "ProfileList": {
+        "type": "object",
+        "required": [
+          "users"
+        ],
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserProfile"
+            }
+          }
+        }
+      },
+      "FeedItem": {
+        "type": "object",
+        "description": "Post card for the home feed (includes author profile fields and like state for the requester).",
+        "required": [
+          "id",
+          "author_id",
+          "author_username",
+          "author_display_name",
+          "author_avatar_path",
+          "body",
+          "created_at",
+          "updated_at",
+          "like_count",
+          "liked_by_me"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "author_id": {
+            "type": "string"
+          },
+          "author_username": {
+            "type": "string"
+          },
+          "author_display_name": {
+            "type": "string"
+          },
+          "author_avatar_path": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "like_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "liked_by_me": {
+            "type": "boolean",
+            "description": "Whether the authenticated requester liked this post"
+          }
+        }
+      },
+      "FeedPage": {
+        "type": "object",
+        "description": "Page of home-feed posts. `next_cursor` is empty when there are no more items.",
+        "required": [
+          "posts",
+          "next_cursor"
+        ],
+        "properties": {
+          "posts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeedItem"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Opaque cursor `\"{created_at}_{post_id}\"` (unix seconds + post id). Empty string when no further page.",
+            "examples": [
+              "",
+              "1710000000_abc123"
+            ]
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid JSON or invalid_argument",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing/invalid Bearer token or bad credentials",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "email_unverified, forbidden, or not owner",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Email or username already taken",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "HTTP method not allowed for this path"
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Service is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/signup": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Create account",
+        "description": "Registers with unique email + username. Creates a verification code and returns immediately; the Resend email is sent in the background (does not block the response). User remains unverified until POST /auth/verify. With LIPO_MAIL_DEV=1, codes are logged locally instead of calling Resend.",
+        "operationId": "signup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupResponse"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Conflict": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/auth/verify": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Verify email",
+        "description": "Consumes a valid 6-digit code for the email. Idempotent if already verified.",
+        "operationId": "verifyEmail",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "Forbidden": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/auth/signin": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Sign in",
+        "description": "`login` may be email or username. Requires verified email and non-deactivated account. Returns a Bearer session token (~30 day expiry).",
+        "operationId": "signin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SigninRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SigninResponse"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "Forbidden": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Current user",
+        "operationId": "getMe",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Revoke current session",
+        "operationId": "logout",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/users/{username}": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Public profile by username",
+        "description": "Always omits email. Deactivated users are not found.",
+        "operationId": "getUserByUsername",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            }
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/users/{username}/posts": {
+      "get": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "List posts by username",
+        "description": "Newest first; server caps at 50.",
+        "operationId": "listUserPosts",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Posts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostsList"
+                }
+              }
+            }
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/me": {
+      "patch": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Update own profile",
+        "description": "Partial update of display fields and optional username change (unique).",
+        "operationId": "patchMe",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "Conflict": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/me/profile": {
+      "patch": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Update own profile (alias of /me)",
+        "description": "Partial update of display fields and optional username change (unique).",
+        "operationId": "patchMeProfile",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "Conflict": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/me/settings": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Get settings",
+        "operationId": "getSettings",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSettings"
+                }
+              }
+            }
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Update settings",
+        "description": "All settings fields are required on PATCH (full replace of the settings object).",
+        "operationId": "patchSettings",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSettings"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/me/avatar": {
+      "put": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Upload avatar",
+        "description": "JSON base64 upload (no multipart). Accepts JPEG/PNG by magic bytes; stored under `LIPO_UPLOAD_DIR`.",
+        "operationId": "putAvatar",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AvatarUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User with new avatar_path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Remove avatar",
+        "operationId": "deleteAvatar",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Avatar cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/avatars/{id}": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Download avatar image",
+        "description": "Raw image bytes with Content-Type image/jpeg or image/png.",
+        "operationId": "getAvatar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "User id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image bytes",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/me/password": {
+      "post": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Change password",
+        "operationId": "changePassword",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/me/email": {
+      "post": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Change email",
+        "description": "Requires current password. Sets email_verified=false and sends a new verification code.",
+        "operationId": "changeEmail",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email change initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "Conflict": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/me/deactivate": {
+      "post": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Deactivate account",
+        "description": "Requires password. Sets deactivated_at and revokes sessions.",
+        "operationId": "deactivate",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeactivateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account deactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/posts": {
+      "post": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Create post",
+        "operationId": "createPost",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/posts/{id}": {
+      "get": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Get post",
+        "operationId": "getPost",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                }
+              }
+            }
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Edit own post",
+        "operationId": "patchPost",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "Forbidden": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Delete own post",
+        "operationId": "deletePost",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "Forbidden": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/users/{username}/follow": {
+      "post": {
+        "tags": [
+          "Social"
+        ],
+        "summary": "Follow user",
+        "description": "Idempotent: already following returns 200 with existing Follow.",
+        "operationId": "followUser",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Follow edge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Follow"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Social"
+        ],
+        "summary": "Unfollow user",
+        "description": "Idempotent: not following still returns 200 Ok.",
+        "operationId": "unfollowUser",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unfollowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Social"
+        ],
+        "summary": "Follow status for current user",
+        "description": "Bearer optional. Without a token, `following` is false. With a valid token, reports whether the requester follows the target.",
+        "operationId": "getFollowStatus",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowingStatus"
+                }
+              }
+            }
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/users/{username}/followers": {
+      "get": {
+        "tags": [
+          "Social"
+        ],
+        "summary": "List followers",
+        "operationId": "listFollowers",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Follower profiles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            }
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/users/{username}/following": {
+      "get": {
+        "tags": [
+          "Social"
+        ],
+        "summary": "List following",
+        "operationId": "listFollowing",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Following profiles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            }
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/posts/{id}/like": {
+      "post": {
+        "tags": [
+          "Social"
+        ],
+        "summary": "Like post",
+        "description": "Idempotent. Increments posts.like_count on first like.",
+        "operationId": "likePost",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Like edge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Like"
+                }
+              }
+            }
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Social"
+        ],
+        "summary": "Unlike post",
+        "description": "Idempotent. Decrements posts.like_count (clamped at 0) when a like existed.",
+        "operationId": "unlikePost",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unliked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "NotFound": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/feed": {
+      "get": {
+        "tags": [
+          "Feed"
+        ],
+        "summary": "Home timeline",
+        "description": "Posts from users the requester follows, plus the requester's own posts, newest first. Requires Bearer auth. Cursor is opaque `created_at_postid` (unix seconds).",
+        "operationId": "getFeed",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size (default 20, max 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination cursor from a previous `next_cursor`",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Feed page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedPage"
+                }
+              }
+            }
+          },
+          "BadRequest": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "Unauthorized": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  }
+}
